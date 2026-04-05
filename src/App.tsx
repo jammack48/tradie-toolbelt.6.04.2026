@@ -53,7 +53,7 @@ import SplashPage from "./pages/SplashPage";
 const queryClient = new QueryClient();
 
 function AppLayout() {
-  const { mode, isWorkMode, isTimesheetOnlyMode, isIntroMode, clearMode } = useAppMode();
+  const { mode, isWorkMode, isTimesheetOnlyMode, isIntroMode } = useAppMode();
   const { user, loading, isDemo, setIsDemo } = useAuth();
   const [showLogin, setShowLogin] = useState(false);
   const { settings, loading: settingsLoading } = useUserSettings();
@@ -64,12 +64,6 @@ function AppLayout() {
     setTheme(settings.theme);
     setIsDark(settings.isDark);
   }, [settingsLoading, settings.theme, settings.isDark, setTheme, setIsDark]);
-
-  useEffect(() => {
-    if (!user && !isDemo) {
-      clearMode();
-    }
-  }, [user, isDemo, clearMode]);
 
   // Show loading spinner while auth initializes
   if (loading) {
@@ -128,6 +122,7 @@ function AppLayout() {
                 <Route path="/work-hub" element={<WorkHub />} />
                 <Route path="/timesheet" element={<WorkTimesheet />} />
                 <Route path="/schedule" element={<SchedulePage />} />
+                <Route path="/quote/new" element={<QuotePage />} />
                 <Route path="/quote/:id" element={<QuotePage />} />
                 <Route path="*" element={<WorkHome />} />
               </>

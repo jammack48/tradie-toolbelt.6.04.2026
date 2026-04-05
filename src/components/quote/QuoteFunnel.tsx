@@ -3,6 +3,7 @@ import { Search, ArrowLeft, ArrowRight, Wrench, Zap, Settings, Hammer, Bath, Pen
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import { VoiceInputButton } from "@/components/VoiceInputButton";
 import { useDemoData } from "@/contexts/DemoDataContext";
 import { bundleTemplates, type BundleTemplate } from "@/data/dummyJobDetails";
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty, CommandGroup } from "@/components/ui/command";
@@ -122,19 +123,23 @@ function StepCustomer({ onSelect, onSkip, label = "quote", customers }: { onSele
 /* ── Step 2: Confirm Address ───────────────────────────── */
 function StepAddress({
   address,
-  customerAddress,
+  customerName,
+  customerSites,
   onAddressChange,
+  onSaveAddress,
   onNext,
   onBack,
 }: {
   address: string;
-  customerAddress: string;
+  customerName?: string;
+  customerSites: string[];
   onAddressChange: (v: string) => void;
+  onSaveAddress?: (v: string) => void;
   onNext: () => void;
   onBack: () => void;
 }) {
-  const [useDifferent, setUseDifferent] = useState(false);
-  const hasCustomerAddress = customerAddress.trim().length > 0;
+  const hasSavedSites = customerSites.length > 0;
+  const canSave = Boolean(onSaveAddress && address.trim());
 
   return (
     <div className="space-y-6">
@@ -144,38 +149,46 @@ function StepAddress({
 
       <h2 className="text-lg font-bold text-card-foreground">Site Address</h2>
 
-      {hasCustomerAddress && !useDifferent ? (
-        <div className="space-y-3">
-          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
-            <p className="text-xs text-muted-foreground mb-1">Customer address</p>
-            <p className="text-sm font-medium text-card-foreground">{customerAddress}</p>
+      <div className="space-y-3">
+        {hasSavedSites && (
+          <div className="space-y-2">
+            <p className="text-xs text-muted-foreground">
+              Saved sites{customerName ? ` for ${customerName}` : ""}
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {customerSites.map((site) => (
+                <button
+                  key={site}
+                  onClick={() => onAddressChange(site)}
+                  className="rounded-full border border-border px-3 py-1.5 text-xs hover:bg-muted transition-colors"
+                >
+                  {site}
+                </button>
+              ))}
+            </div>
           </div>
-          <button
-            onClick={() => { setUseDifferent(true); onAddressChange(""); }}
-            className="text-sm text-primary hover:underline cursor-pointer"
-          >
-            Use a different address
-          </button>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <Input
-            value={address}
-            onChange={(e) => onAddressChange(e.target.value)}
-            placeholder="Enter site address…"
-            className="h-12"
-            autoFocus
-          />
-          {hasCustomerAddress && (
+        )}
+
+        <Input
+          value={address}
+          onChange={(e) => onAddressChange(e.target.value)}
+          placeholder="Enter site address…"
+          className="h-12"
+          autoFocus
+        />
+
+        {canSave && (
+          <div className="flex items-center justify-between rounded-md border border-border px-3 py-2">
+            <span className="text-xs text-muted-foreground">Save as customer site</span>
             <button
-              onClick={() => { setUseDifferent(false); onAddressChange(customerAddress); }}
+              onClick={() => onSaveAddress?.(address)}
               className="text-sm text-primary hover:underline cursor-pointer"
             >
-              Use customer address
+              Save now
             </button>
-          )}
-        </div>
-      )}
+          </div>
+        )}
+      </div>
 
       <Button className="w-full h-12 gap-2" onClick={onNext} disabled={!address.trim()}>
         Next <ArrowRight className="w-4 h-4" />
@@ -317,6 +330,9 @@ function StepBundle({
                 className="min-h-[80px]"
                 autoFocus
               />
+              <div className="flex justify-end">
+                <VoiceInputButton onTranscript={(text) => setCustomDesc((prev) => (prev ? `${prev.trim()} ${text}` : text))} />
+              </div>
               <Button
                 className="w-full h-12"
                 disabled={!customDesc.trim()}
@@ -345,15 +361,37 @@ function StepBundle({
 /* ── Main Funnel (pure content, no page shell) ─────────── */
 export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initialCustomer }: QuoteFunnelProps) {
   const { customers } = useDemoData();
+  const SITES_KEY = "quote.customer.sites";
   const startStep = initialCustomer ? 2 : 1;
   const [step, _setStep] = useState(startStep);
   const setStep = (s: number) => { _setStep(s); onStepChange?.(s); };
   const [customer, setCustomer] = useState<DemoCustomer | null>(initialCustomer || null);
   const [address, setAddress] = useState(initialCustomer?.address || "");
+  const [sitesByCustomer, setSitesByCustomer] = useState<Record<number, string[]>>(() => {
+    const saved = localStorage.getItem(SITES_KEY);
+    if (!saved) return {};
+    try {
+      return JSON.parse(saved) as Record<number, string[]>;
+    } catch {
+      return {};
+    }
+  });
+
+  const saveSiteForCustomer = (customerId: number, siteAddress: string) => {
+    const clean = siteAddress.trim();
+    if (!clean) return;
+    setSitesByCustomer((prev) => {
+      const nextForCustomer = Array.from(new Set([...(prev[customerId] || []), clean]));
+      const next = { ...prev, [customerId]: nextForCustomer };
+      localStorage.setItem(SITES_KEY, JSON.stringify(next));
+      return next;
+    });
+  };
 
   const handleSelectCustomer = (c: DemoCustomer) => {
     setCustomer(c);
-    setAddress(c.address);
+    const savedSites = sitesByCustomer[c.id] || [];
+    setAddress(savedSites[0] || c.address);
     setStep(2);
   };
 
@@ -379,8 +417,10 @@ export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initial
       {step === 2 && (
         <StepAddress
           address={address}
-          customerAddress={customer?.address || ""}
+          customerName={customer?.name}
+          customerSites={customer ? Array.from(new Set([customer.address, ...(sitesByCustomer[customer.id] || [])])).filter(Boolean) : []}
           onAddressChange={setAddress}
+          onSaveAddress={customer ? (v) => saveSiteForCustomer(customer.id, v) : undefined}
           onNext={() => setStep(3)}
           onBack={() => setStep(1)}
         />

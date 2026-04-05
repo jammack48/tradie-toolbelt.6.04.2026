@@ -19,6 +19,7 @@ import { coverLetterTemplates } from "@/data/coverLetterTemplates";
 import { QuotePreview } from "@/components/quote/QuotePreview";
 import { useAuth } from "@/contexts/AuthContext";
 import { searchSupplierItems, type SupplierItem } from "@/services/supplierService";
+import { VoiceInputButton } from "@/components/VoiceInputButton";
 
 interface LineItem {
   id: string;
@@ -56,15 +57,27 @@ function genId() { return `qi-${nextId++}`; }
 function blockId() { return `blk-${nextId++}`; }
 
 /* ── Section header row ─────────────────────────────────── */
-function SectionHeader({ label, total, isOpen, onToggle }: { label: string; total: number; isOpen: boolean; onToggle: () => void; }) {
+function SectionHeader({ label, total, isOpen, onToggle, onAdd }: { label: string; total: number; isOpen: boolean; onToggle: () => void; onAdd: () => void; }) {
   return (
-    <button onClick={onToggle} className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-muted/60 hover:bg-muted transition-colors cursor-pointer">
-      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+    <div
+      className="w-full flex items-center justify-between px-3 py-2 rounded-lg transition-colors"
+      style={{ backgroundColor: "hsl(var(--section-contrast-bg) / var(--section-contrast-alpha))" }}
+    >
+      <div className="flex items-center gap-2">
+        <button onClick={onToggle} className="text-xs font-semibold uppercase tracking-wider text-muted-foreground hover:text-foreground cursor-pointer">
+          {label}
+        </button>
+        <button onClick={onAdd} className="text-xs font-bold text-primary hover:text-primary/80 cursor-pointer">
+          + {label.toUpperCase()}
+        </button>
+      </div>
       <div className="flex items-center gap-2">
         <span className="text-sm font-bold">${total.toFixed(2)}</span>
-        {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        <button onClick={onToggle} className="text-muted-foreground hover:text-foreground cursor-pointer">
+          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+        </button>
       </div>
-    </button>
+    </div>
   );
 }
 
@@ -113,7 +126,7 @@ function BlockSection({ label, items, section, isOpen, onToggle, onUpdate, onDel
   const total = items.reduce((s, i) => s + i.qty * i.sellPrice, 0);
   return (
     <div>
-      <SectionHeader label={label} total={total} isOpen={isOpen} onToggle={onToggle} />
+      <SectionHeader label={label} total={total} isOpen={isOpen} onToggle={onToggle} onAdd={onOpenPalette} />
       <Collapsible open={isOpen}>
         <CollapsibleContent>
           <div className="space-y-1 mt-1">
@@ -121,7 +134,6 @@ function BlockSection({ label, items, section, isOpen, onToggle, onUpdate, onDel
               <ItemRow key={item.id} item={item} isLast={idx === items.length - 1} onUpdate={onUpdate} onDelete={onDelete} onEnterLast={onAddBlank} lastRef={lastRef} globalMarkupValue={globalMarkupValue} useGlobalMarkup={useGlobalMarkup} onResetToGlobal={onResetToGlobal} />
             ))}
           </div>
-          <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground mt-1" onClick={onOpenPalette}><Plus className="w-4 h-4" /> Add</Button>
         </CollapsibleContent>
       </Collapsible>
     </div>
@@ -454,6 +466,9 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
                     placeholder="Describe scope of this job…"
                     className="min-h-[80px] bg-muted/20 rounded-lg px-3 py-2 border border-border focus-visible:ring-1 focus-visible:ring-ring text-sm resize-none overflow-hidden"
                   />
+                  <div className="flex justify-end">
+                    <VoiceInputButton onTranscript={(text) => updateBlockField(block.id, "description", block.description ? `${block.description.trim()} ${text}` : text)} />
+                  </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0 mt-1">
                   {block.qty > 1 && (
