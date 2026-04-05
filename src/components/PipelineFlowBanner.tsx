@@ -13,14 +13,18 @@ export const PipelineFlowBanner = ({ activeStage }: PipelineFlowBannerProps) => 
         {STAGES.map((stage, i) => (
           <div
             key={stage}
-            className={cn(
-              "flex items-center justify-center gap-0.5 h-[34px] text-[10px] font-semibold uppercase tracking-wider",
-              activeStage === stage
-                ? "text-primary"
-                : "text-muted-foreground/70"
-            )}
+            className="flex items-center justify-center gap-0.5 h-[34px] text-[10px] font-semibold uppercase tracking-wider"
           >
-            <span className="truncate">{stage}</span>
+            <span
+              className={cn(
+                "px-2 py-0.5 rounded-full transition-colors truncate",
+                activeStage === stage
+                  ? "bg-[hsl(var(--status-green))] text-white font-bold shadow-sm"
+                  : "text-muted-foreground/70"
+              )}
+            >
+              {stage}
+            </span>
             {i < STAGES.length - 1 && (
               <span className="flex shrink-0 opacity-40 -space-x-1.5">
                 <ChevronRight className="w-3 h-3" />

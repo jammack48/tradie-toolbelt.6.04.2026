@@ -110,6 +110,7 @@ export const CUSTOMER_CARD_EXTRAS: ToolbarTab[] = [
 export const SETTINGS_EXTRAS: ToolbarTab[] = [
   BACK_TAB,
   { id: "business", label: "Business", icon: Building2 },
+  { id: "suppliers", label: "Suppliers", icon: Package },
   { id: "notifications", label: "Notifications", icon: Bell },
   { id: "appearance", label: "Appearance", icon: Palette },
   { id: "billing", label: "Billing", icon: CreditCard },
@@ -146,8 +147,8 @@ export const WORK_JOB_EXTRAS: ToolbarTab[] = [
   BACK_TAB,
   { id: "overview", label: "Overview", icon: ClipboardList },
   { id: "scope", label: "Scope", icon: FileCheck },
-  { id: "time", label: "Time", icon: Clock },
   { id: "materials", label: "Materials", icon: Package },
+  { id: "time", label: "Time", icon: Clock },
   { id: "notes", label: "Notes", icon: StickyNote },
   { id: "photos", label: "Photos", icon: Camera },
   { id: "forms", label: "Forms", icon: ClipboardCheck },

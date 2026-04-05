@@ -10,6 +10,7 @@ import { PageToolbar } from "@/components/PageToolbar";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { DemoCustomer as Customer } from "@/types/demoData";
 import { useDemoData } from "@/contexts/DemoDataContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { CUSTOMER_LIST_EXTRAS } from "@/config/toolbarTabs";
 import { CustomerSearchBar } from "@/components/customer/CustomerSearchBar";
 import { CustomerFilters, type SortOption } from "@/components/customer/CustomerFilters";
@@ -38,6 +39,7 @@ export default function Customers() {
   const location = useLocation();
   const [activeTab, setActiveTab] = useState<CustomerTab>("all");
   const { customers, jobs } = useDemoData();
+  const { isDemo } = useAuth();
   const unreadClients = useMemo(() => new Set(jobs.filter((j) => j.hasUnread).map((j) => j.client)), [jobs]);
   const isMobile = useIsMobile();
 
@@ -233,7 +235,17 @@ export default function Customers() {
             </div>
           ))}
           {filtered.length === 0 && (
-            <div className="text-center py-8 text-sm text-muted-foreground">No customers match your search.</div>
+            <div className="text-center py-8 text-sm text-muted-foreground space-y-3">
+              {isDemo ? (
+                <div>No customers match your search.</div>
+              ) : (
+                <>
+                  <div>Customers not found</div>
+                  <div className="text-xs">No customers yet</div>
+                  <Button size="sm" onClick={() => setNewCustOpen(true)}>Add your first customer</Button>
+                </>
+              )}
+            </div>
           )}
         </div>
       </PageToolbar>

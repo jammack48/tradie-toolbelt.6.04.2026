@@ -1,6 +1,7 @@
-import { MapPin, Users, Calendar, AlertTriangle, Briefcase, Phone, Mail, User } from "lucide-react";
+import { MapPin, Users, Calendar, AlertTriangle, Briefcase, Phone, Mail, User, CalendarPlus } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
 import type { JobDetail } from "@/data/dummyJobDetails";
 import { DUMMY_CUSTOMERS } from "@/data/dummyCustomers";
@@ -9,7 +10,12 @@ import { formatJobNumber } from "@/lib/jobNumber";
 
 interface OverviewTabProps {
   job: JobDetail;
+  onSchedule?: () => void;
+  scheduledStaff?: string[];
+  scheduledDate?: string;
 }
+
+const PRE_SCHEDULE_STAGES = ["Lead", "To Quote", "Quote Sent", "Quote Accepted"];
 
 function getStageSummary(stage: string): string {
   const s = stage.toLowerCase();
@@ -21,10 +27,19 @@ function getStageSummary(stage: string): string {
   return stage;
 }
 
-export function OverviewTab({ job }: OverviewTabProps) {
+export function OverviewTab({ job, onSchedule, scheduledStaff = [], scheduledDate = "" }: OverviewTabProps) {
   const navigate = useNavigate();
   const { prefix } = useJobPrefix();
   const displayId = formatJobNumber(job.id, prefix);
+  const isPreSchedule = PRE_SCHEDULE_STAGES.includes(job.stage) && scheduledStaff.length === 0;
+  const isQuoteAccepted = job.stage === "Quote Accepted";
+
+  // Override staff/dates for pre-schedule stages (unless we have scheduled data)
+  const displayStaff = scheduledStaff.length > 0
+    ? scheduledStaff.map(name => ({ name, avatar: name.split(" ").map(w => w[0]).join("") }))
+    : isPreSchedule ? [] : job.staff;
+  const displayStartDate = scheduledDate || (isPreSchedule ? "" : job.startDate);
+  const displayDueDate = isPreSchedule ? "" : job.dueDate;
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 h-full">
@@ -105,11 +120,11 @@ export function OverviewTab({ job }: OverviewTabProps) {
           <div className="flex items-center gap-2 text-sm font-medium">
             <Users className="w-4 h-4 text-muted-foreground" /> Staff & Schedule
           </div>
-          {job.staff.length === 0 ? (
+          {displayStaff.length === 0 ? (
             <p className="text-xs text-muted-foreground">No staff assigned</p>
           ) : (
             <div className="flex items-center gap-2 flex-wrap">
-              {job.staff.map((s) => (
+              {displayStaff.map((s) => (
                 <div key={s.name} className="flex items-center gap-1.5">
                   <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-[10px] font-bold text-primary">
                     {s.avatar}
@@ -119,22 +134,33 @@ export function OverviewTab({ job }: OverviewTabProps) {
               ))}
             </div>
           )}
+          {isQuoteAccepted && onSchedule && (
+            <Button
+              size="sm"
+              onClick={onSchedule}
+              className="w-full gap-1.5 bg-[hsl(var(--status-green))] hover:bg-[hsl(var(--status-green))]/90 text-white font-bold"
+            >
+              <CalendarPlus className="w-4 h-4" /> Schedule Job
+            </Button>
+          )}
           <div className="border-t border-border/50 pt-2 space-y-1">
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Calendar className="w-3.5 h-3.5" />
               <span>Start:</span>
-              <span className="text-card-foreground font-medium">{job.startDate || "—"}</span>
+              <span className="text-card-foreground font-medium">{displayStartDate || "Not scheduled"}</span>
             </div>
             <div className="flex items-center gap-2 text-xs text-muted-foreground">
               <Calendar className="w-3.5 h-3.5" />
               <span>Due:</span>
-              <span className="text-card-foreground font-medium">{job.dueDate || "—"}</span>
+              <span className="text-card-foreground font-medium">{displayDueDate || "Not scheduled"}</span>
             </div>
-            <div className="flex items-center gap-2 text-xs text-muted-foreground">
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Age:</span>
-              <span className="text-card-foreground font-medium">{job.ageDays} days</span>
-            </div>
+            {!isPreSchedule && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Age:</span>
+                <span className="text-card-foreground font-medium">{job.ageDays} days</span>
+              </div>
+            )}
           </div>
         </CardContent>
       </Card>
@@ -162,7 +188,6 @@ export function OverviewTab({ job }: OverviewTabProps) {
           )}
         </CardContent>
       </Card>
-
     </div>
   );
 }

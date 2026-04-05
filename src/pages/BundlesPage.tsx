@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Package, Search, Plus, ChevronDown, ChevronRight, Wrench, Zap, Settings, Hammer, Bath, Trash2 } from "lucide-react";
 import { PageToolbar } from "@/components/PageToolbar";
@@ -11,6 +11,8 @@ import { bundleTemplates as defaultBundles, catalogueItems, type BundleTemplate,
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty, CommandGroup } from "@/components/ui/command";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { BUNDLES_EXTRAS, handleCommonTab } from "@/config/toolbarTabs";
+import { searchSupplierItems } from "@/services/supplierService";
+import { useAuth } from "@/contexts/AuthContext";
 
 const BUNDLE_ICONS: Record<string, React.ElementType> = {
   b1: Wrench, b2: Zap, b3: Settings, b4: Hammer, b5: Bath,
@@ -109,7 +111,35 @@ function BrowseTab({ bundles }: { bundles: BundleTemplate[] }) {
 
 function CatalogueAdder({ section, onAdd }: { section: "labour" | "materials" | "extras"; onAdd: (item: CatalogueItem) => void }) {
   const [open, setOpen] = useState(false);
+  const { user } = useAuth();
+  const [search, setSearch] = useState("");
+  const [materialResults, setMaterialResults] = useState<CatalogueItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const items = catalogueItems.filter(i => i.section === section);
+
+  useEffect(() => {
+    if (section !== "materials" || !open || !user) return;
+    const timeout = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const rows = await searchSupplierItems(search, 50);
+        setMaterialResults(rows.map((r) => ({
+          id: r.id,
+          name: r.name,
+          quantity: 1,
+          unit: "pcs",
+          unitPrice: r.sell_price,
+          supplier: r.supplier_name ?? "",
+          section: "materials" as const,
+        })));
+      } finally {
+        setLoading(false);
+      }
+    }, 250);
+
+    return () => clearTimeout(timeout);
+  }, [section, open, search, user]);
+
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
@@ -119,17 +149,40 @@ function CatalogueAdder({ section, onAdd }: { section: "labour" | "materials" | 
       </PopoverTrigger>
       <PopoverContent className="p-0 w-64" align="start">
         <Command>
-          <CommandInput placeholder={`Search ${section}…`} />
+          <CommandInput
+            placeholder={`Search ${section}…`}
+            value={section === "materials" ? search : undefined}
+            onValueChange={section === "materials" ? setSearch : undefined}
+          />
           <CommandList>
-            <CommandEmpty>No items found</CommandEmpty>
-            <CommandGroup>
-              {items.map(item => (
-                <CommandItem key={item.id} onSelect={() => { onAdd(item); setOpen(false); }}>
-                  <span className="text-sm">{item.name}</span>
-                  <span className="ml-auto text-xs text-muted-foreground">${item.unitPrice}</span>
-                </CommandItem>
-              ))}
-            </CommandGroup>
+            {section === "materials" ? (
+              <>
+                {loading && <CommandEmpty>Loading supplier items…</CommandEmpty>}
+                {!loading && materialResults.length === 0 && <CommandEmpty>No supplier items found</CommandEmpty>}
+                {!loading && materialResults.length > 0 && (
+                  <CommandGroup>
+                    {materialResults.map(item => (
+                      <CommandItem key={item.id} onSelect={() => { onAdd(item); setOpen(false); }}>
+                        <span className="text-sm">{item.name}</span>
+                        <span className="ml-auto text-xs text-muted-foreground">${item.unitPrice}</span>
+                      </CommandItem>
+                    ))}
+                  </CommandGroup>
+                )}
+              </>
+            ) : (
+              <>
+                <CommandEmpty>No items found</CommandEmpty>
+                <CommandGroup>
+                  {items.map(item => (
+                    <CommandItem key={item.id} onSelect={() => { onAdd(item); setOpen(false); }}>
+                      <span className="text-sm">{item.name}</span>
+                      <span className="ml-auto text-xs text-muted-foreground">${item.unitPrice}</span>
+                    </CommandItem>
+                  ))}
+                </CommandGroup>
+              </>
+            )}
           </CommandList>
         </Command>
       </PopoverContent>

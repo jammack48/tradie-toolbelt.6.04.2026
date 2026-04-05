@@ -3,7 +3,6 @@ import { Home, StickyNote, MessageCircle, FolderOpen, Clock } from "lucide-react
 import { cn } from "@/lib/utils";
 import { INITIAL_NOTES } from "@/data/dummyTeamChat";
 import { useAppMode } from "@/contexts/AppModeContext";
-import { useToolbarPosition } from "@/contexts/ToolbarPositionContext";
 
 const NAV_ITEMS = [
   { id: "home", icon: Home, label: "Schedule", path: "/" },
@@ -19,8 +18,8 @@ const TIMESHEET_NAV_ITEMS = [
 ];
 
 const INTRO_NAV_ITEMS = [
-  { id: "home", icon: Home, label: "Home", path: "/" },
-  { id: "invoices", icon: FolderOpen, label: "Invoices", path: "/intro-invoices" },
+  { id: "home", icon: Home, label: "Jobs", path: "/" },
+  { id: "time", icon: Clock, label: "Timesheet", path: "/timesheet" },
 ];
 
 // Count urgent alerts assigned to current user (Dave)
@@ -33,32 +32,12 @@ export function WorkBottomNav() {
   const navigate = useNavigate();
   const location = useLocation();
   const { isTimesheetOnlyMode, isIntroMode } = useAppMode();
-  const { position } = useToolbarPosition();
   const urgentCount = getUrgentCount();
   const items = isTimesheetOnlyMode ? TIMESHEET_NAV_ITEMS : isIntroMode ? INTRO_NAV_ITEMS : NAV_ITEMS;
-  const isVertical = position === "left" || position === "right";
 
   return (
-    <nav
-      className={cn(
-        "z-50 border-border bg-background/95 backdrop-blur-sm",
-        isVertical
-          ? "fixed top-12 bottom-0 w-16 border-r"
-          : "fixed left-0 right-0 h-14 border-t safe-area-bottom",
-        position === "left" && "left-0",
-        position === "right" && "right-0 border-r-0 border-l",
-        position === "top" && "top-12",
-        position === "bottom" && "bottom-0"
-      )}
-    >
-      <div
-        className={cn(
-          "max-w-lg",
-          isVertical
-            ? "h-full w-full flex flex-col items-center gap-1 py-2"
-            : "h-14 mx-auto flex items-center justify-around"
-        )}
-      >
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur-sm safe-area-bottom">
+      <div className="flex items-center justify-around max-w-lg mx-auto h-14">
         {items.map((item) => {
           const active = item.path ? location.pathname === item.path : false;
           return (
@@ -68,10 +47,7 @@ export function WorkBottomNav() {
                 if (item.path) navigate(item.path);
               }}
               className={cn(
-                "rounded-lg transition-colors",
-                isVertical
-                  ? "flex flex-col items-center justify-center w-14 min-h-[52px] gap-0.5 px-0.5"
-                  : "flex flex-col items-center gap-0.5 px-3 py-1",
+                "flex flex-col items-center gap-0.5 px-3 py-1 rounded-lg transition-colors",
                 active ? "text-primary" : "text-muted-foreground"
               )}
             >
@@ -83,7 +59,7 @@ export function WorkBottomNav() {
                   </span>
                 )}
               </div>
-              <span className="text-[10px] font-medium leading-none">{item.label}</span>
+              <span className="text-[10px] font-medium">{item.label}</span>
             </button>
           );
         })}

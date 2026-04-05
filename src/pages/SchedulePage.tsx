@@ -1,6 +1,5 @@
 import { useState, useMemo, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { useAppMode } from "@/contexts/AppModeContext";
 import { startOfWeek, addWeeks, subWeeks, format, addDays } from "date-fns";
 import { CalendarDays, X, Check } from "lucide-react";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -12,33 +11,36 @@ import { TimeGrid3Day } from "@/components/schedule/TimeGrid3Day";
 import { generateWeekJobs, formatTime } from "@/components/schedule/scheduleData";
 import { SCHEDULE_EXTRAS, handleCommonTab } from "@/config/toolbarTabs";
 import { Button } from "@/components/ui/button";
+import { ScheduleJobDialog } from "@/components/job/ScheduleJobDialog";
 import { getJobDetail } from "@/data/dummyJobDetails";
 import { cn } from "@/lib/utils";
 
 const SchedulePage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { trade } = useAppMode();
   const isMobile = useIsMobile();
   const returnJobId = searchParams.get("returnJob");
+  const bookJobId = searchParams.get("bookJob");
+  const activeJobId = returnJobId || bookJobId;
 
-  const returnBookingJob = useMemo(() => {
-    if (!returnJobId) return null;
-    const qpName = searchParams.get("returnJobName");
-    const qpClient = searchParams.get("returnClient");
-    const qpAddress = searchParams.get("returnAddress");
+  const activeBookingJob = useMemo(() => {
+    if (!activeJobId) return null;
+    const qpName = searchParams.get("returnJobName") || searchParams.get("jobName");
+    const qpClient = searchParams.get("returnClient") || searchParams.get("client");
+    const qpAddress = searchParams.get("returnAddress") || searchParams.get("address");
     if (qpName) {
       return { jobName: qpName, client: qpClient || "Customer", address: qpAddress || "" };
     }
-    const detail = getJobDetail(returnJobId);
+    const detail = getJobDetail(activeJobId);
     if (detail) return { jobName: detail.jobName, client: detail.client, address: detail.address };
-    return { jobName: returnJobId, client: "Customer", address: "" };
-  }, [returnJobId, searchParams]);
+    return { jobName: activeJobId, client: "Customer", address: "" };
+  }, [activeJobId, searchParams]);
 
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [viewDays, setViewDays] = useState<1 | 3 | 5>(5);
-  const isBookingMode = !!returnJobId;
-  const [selectedStaff, setSelectedStaff] = useState<string[]>(isBookingMode ? ["Dave"] : []);
+  const isBookingMode = !!activeJobId;
+  const isReturnMode = !!returnJobId;
+  const [selectedStaff, setSelectedStaff] = useState<string[]>([]);
   const [selectedDay, setSelectedDay] = useState(() => {
     const today = new Date();
     const start = startOfWeek(today, { weekStartsOn: 1 });
@@ -49,6 +51,10 @@ const SchedulePage = () => {
   const [bookedSlot, setBookedSlot] = useState<{ dayOffset: number; startHour: number } | null>(null);
   const [returnDuration, setReturnDuration] = useState(2);
 
+  // Duration picker dialog state
+  const [durationDialogOpen, setDurationDialogOpen] = useState(false);
+  const [pendingSlot, setPendingSlot] = useState<{ dayOffset: number; hour: number } | null>(null);
+
   const selectedDate = addDays(weekStart, selectedDay);
 
   const visibleDates = useMemo(() => {
@@ -57,25 +63,25 @@ const SchedulePage = () => {
     return Array.from({ length: viewDays }, (_, i) => addDays(selectedDate, i - offset));
   }, [selectedDate, viewDays]);
 
-  const weekJobs = useMemo(() => generateWeekJobs(weekStart, trade), [weekStart, trade]);
+  const weekJobs = useMemo(() => generateWeekJobs(weekStart), [weekStart]);
 
   const allJobs = useMemo(() => {
     const base = [...weekJobs];
-    if (bookedSlot && returnBookingJob) {
+    if (bookedSlot && activeBookingJob) {
       base.push({
-        id: `${returnJobId}-return`,
-        jobName: `↩ ${returnBookingJob.jobName}`,
-        client: returnBookingJob.client,
-        assignedTo: "Dave",
+        id: `${activeJobId}-booked`,
+        jobName: activeBookingJob.jobName,
+        client: activeBookingJob.client,
+        assignedTo: selectedStaff[0] || "Unassigned",
         dayOffset: bookedSlot.dayOffset,
         startHour: bookedSlot.startHour,
         durationHours: returnDuration,
-        address: returnBookingJob.address,
+        address: activeBookingJob.address,
         status: "Scheduled",
       });
     }
     return base;
-  }, [bookedSlot, returnBookingJob, returnJobId, weekJobs]);
+  }, [bookedSlot, activeBookingJob, activeJobId, weekJobs, returnDuration, selectedStaff]);
 
   const filteredJobs = useMemo(() => {
     if (selectedStaff.length === 0) return allJobs;
@@ -85,16 +91,37 @@ const SchedulePage = () => {
   const weekEnd = addDays(weekStart, 6);
 
   const handleSlotClick = useCallback((dayOffset: number, hour: number) => {
-    if (!returnJobId) return;
-    setBookedSlot({ dayOffset, startHour: hour });
-  }, [returnJobId]);
+    if (!activeJobId) return;
+
+    if (isReturnMode) {
+      // Return booking mode: place immediately (existing behaviour)
+      setBookedSlot({ dayOffset, startHour: hour });
+    } else {
+      // New booking mode: show duration picker first
+      setPendingSlot({ dayOffset, hour });
+      setDurationDialogOpen(true);
+    }
+  }, [activeJobId, isReturnMode]);
+
+  const handleDurationConfirm = (hours: number) => {
+    if (!pendingSlot) return;
+    setReturnDuration(hours);
+    setBookedSlot({ dayOffset: pendingSlot.dayOffset, startHour: pendingSlot.hour });
+    setPendingSlot(null);
+  };
 
   const handleConfirmBooking = () => {
-    if (!bookedSlot || !returnBookingJob || !returnJobId) return;
+    if (!bookedSlot || !activeBookingJob || !activeJobId) return;
     const dayDate = addDays(weekStart, bookedSlot.dayOffset);
     const dateStr = format(dayDate, "EEE d MMM");
     const timeStr = formatTime(bookedSlot.startHour);
-    navigate(`/job/${returnJobId}?returnBooked=true&returnDate=${encodeURIComponent(dateStr)}&returnTime=${encodeURIComponent(timeStr)}&resumeCompletion=true`, { replace: true });
+    const staffStr = selectedStaff.join(",");
+    const isBookJob = searchParams.has("bookJob");
+    if (isBookJob) {
+      navigate(`/job/${activeJobId}?bookedStaff=${encodeURIComponent(staffStr)}&bookedDate=${encodeURIComponent(dateStr)}&bookedTime=${encodeURIComponent(timeStr)}`, { replace: true });
+    } else {
+      navigate(`/job/${activeJobId}?returnBooked=true&returnDate=${encodeURIComponent(dateStr)}&returnTime=${encodeURIComponent(timeStr)}&resumeCompletion=true`, { replace: true });
+    }
   };
 
   const handleCancelReturn = () => {
@@ -121,6 +148,10 @@ const SchedulePage = () => {
     handleCommonTab(id, navigate);
   };
 
+  const pendingSlotLabel = pendingSlot
+    ? `${format(addDays(weekStart, pendingSlot.dayOffset), "EEE d MMM")} at ${formatTime(pendingSlot.hour)}${selectedStaff.length > 0 ? ` · ${selectedStaff.join(", ")}` : ""}`
+    : "";
+
   return (
     <PageToolbar
       tabs={SCHEDULE_EXTRAS}
@@ -129,47 +160,50 @@ const SchedulePage = () => {
       pageHeading={
         <div className="flex items-center justify-between flex-wrap gap-2">
           <span className="text-card-foreground font-bold text-base">
-            {returnBookingJob
-              ? `Book Return · ${returnBookingJob.jobName}`
+            {activeBookingJob
+              ? (bookJobId ? `Schedule · ${activeBookingJob.jobName}` : `Book Return · ${activeBookingJob.jobName}`)
               : `Schedule · ${format(weekStart, "d MMM")} – ${format(weekEnd, "d MMM")}`
             }
           </span>
         </div>
       }
     >
-      {/* Return job banner */}
-      {returnJobId && (
+      {/* Booking banner */}
+      {activeJobId && (
         <div className="rounded-lg border-2 border-primary/50 bg-primary/10 p-3 mb-3 space-y-2">
           <div className="flex items-start gap-2">
             <CalendarDays className="w-5 h-5 text-primary shrink-0 mt-0.5" />
             <div className="min-w-0">
               <p className="text-sm font-semibold text-card-foreground">
-                Booking return visit for {returnBookingJob?.jobName || returnJobId}
+                {bookJobId ? "Schedule job" : "Booking return visit"} for {activeBookingJob?.jobName || activeJobId}
               </p>
               <p className="text-xs text-muted-foreground">
                 {bookedSlot
-                  ? `Selected: ${format(addDays(weekStart, bookedSlot.dayOffset), "EEE d MMM")} at ${formatTime(bookedSlot.startHour)} · ${returnDuration}h`
-                  : "Tap an empty time slot to book"
+                  ? `Placed: ${format(addDays(weekStart, bookedSlot.dayOffset), "EEE d MMM")} at ${formatTime(bookedSlot.startHour)} · ${returnDuration}h`
+                  : "Select staff below, then tap an empty time slot"
                 }
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 pl-7 flex-wrap">
-            <span className="text-xs font-medium text-card-foreground">Hours:</span>
-            <div className="flex gap-1">
-              {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => (
-                <Button
-                  key={h}
-                  size="sm"
-                  variant={returnDuration === h ? "default" : "outline"}
-                  className="h-7 w-7 p-0 text-xs"
-                  onClick={() => setReturnDuration(h)}
-                >
-                  {h}
-                </Button>
-              ))}
+          {/* Return mode keeps inline duration picker */}
+          {isReturnMode && (
+            <div className="flex items-center gap-2 pl-7 flex-wrap">
+              <span className="text-xs font-medium text-card-foreground">Hours:</span>
+              <div className="flex gap-1">
+                {[1, 2, 3, 4, 5, 6, 7, 8].map((h) => (
+                  <Button
+                    key={h}
+                    size="sm"
+                    variant={returnDuration === h ? "default" : "outline"}
+                    className="h-7 w-7 p-0 text-xs"
+                    onClick={() => setReturnDuration(h)}
+                  >
+                    {h}
+                  </Button>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
           <div className="flex gap-2 pl-7">
             {bookedSlot && (
               <Button size="sm" className="h-8 gap-1.5" onClick={handleConfirmBooking}>
@@ -186,7 +220,7 @@ const SchedulePage = () => {
       <div className={cn(
         "flex flex-col",
         isMobile && "overflow-x-hidden",
-        isMobile && (returnJobId
+        isMobile && (activeJobId
           ? "h-[calc(100dvh-48px-44px-52px-80px)]"
           : "h-[calc(100dvh-48px-44px-52px)]")
       )}>
@@ -207,7 +241,7 @@ const SchedulePage = () => {
               setSelectedDay(diff);
             }}
           />
-          {!isBookingMode && <StaffFilterBar selectedStaff={selectedStaff} onSelectionChange={setSelectedStaff} />}
+          <StaffFilterBar selectedStaff={selectedStaff} onSelectionChange={setSelectedStaff} />
         </div>
         <div className={cn(
           "flex-1 overflow-y-auto overflow-x-hidden mt-3",
@@ -218,12 +252,21 @@ const SchedulePage = () => {
             jobs={filteredJobs}
             selectedDate={selectedDate}
             onSwipe={handleSwipe}
-            onSlotClick={returnJobId ? handleSlotClick : undefined}
+            onSlotClick={activeJobId ? handleSlotClick : undefined}
             activeSlot={bookedSlot}
             activeDuration={returnDuration}
           />
         </div>
       </div>
+
+      {/* Duration picker dialog for new job booking */}
+      <ScheduleJobDialog
+        open={durationDialogOpen}
+        onOpenChange={setDurationDialogOpen}
+        jobName={activeBookingJob?.jobName || ""}
+        slotLabel={pendingSlotLabel}
+        onConfirm={handleDurationConfirm}
+      />
     </PageToolbar>
   );
 };

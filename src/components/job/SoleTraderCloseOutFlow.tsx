@@ -4,9 +4,11 @@ import {
   Check, ChevronLeft, ChevronRight, Camera, Clock, Package, FileText, Shield,
   Truck, ShoppingCart, ClipboardList, Mic, MicOff, Maximize2, Minimize2,
   DollarSign, Receipt, Send, CheckCircle2, Plus, Trash2, Eye, EyeOff,
-  AlertTriangle, Mail, MessageSquare, CalendarDays, FileCheck, Sparkles, Loader2,
+  AlertTriangle, Mail, MessageSquare, CalendarDays, FileCheck, Sparkles, Loader2, ChevronUp, ChevronDown,
 } from "lucide-react";
+import { MaterialSearch } from "@/components/job/MaterialSearch";
 import { ServiceReminderSection } from "@/components/job/ServiceReminderSection";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -22,7 +24,7 @@ import { checklistTemplates, type CompletedChecklist } from "@/data/dummyCheckli
 import { toast } from "@/hooks/use-toast";
 import { useDemoData } from "@/contexts/DemoDataContext";
 import { stageForPipelineEvent } from "@/services/pipelineTransitions";
-import { useAppMode } from "@/contexts/AppModeContext";
+import { useUserSettings } from "@/contexts/UserSettingsContext";
 import { SequenceSelector } from "@/components/quote/SequenceSelector";
 
 
@@ -128,11 +130,10 @@ interface InvoiceLine {
 
 const ALL_STEPS = [
   { id: "status", label: "Job Status", icon: CheckCircle2 },
-  { id: "checklist", label: "Checklist", icon: ClipboardList },
-  { id: "time", label: "Labour", icon: Clock },
+  { id: "photos", label: "Photos & Checklist", icon: Camera },
   { id: "materials", label: "Materials Used", icon: Package },
+  { id: "time", label: "Labour", icon: Clock },
   { id: "paperwork", label: "Paperwork", icon: FileCheck },
-  { id: "photos", label: "Photos", icon: Camera },
   { id: "certificates", label: "Certificates", icon: Shield },
   { id: "invoice", label: "Invoice", icon: Receipt },
   { id: "done", label: "Done", icon: CheckCircle2 },
@@ -140,20 +141,21 @@ const ALL_STEPS = [
 
 function buildInvoiceLines(job: JobDetail, parts: PartUsed[], actualHours: number): InvoiceLine[] {
   const lines: InvoiceLine[] = [];
-  // Labour first
-  lines.push({ id: "inv-labour", description: "Labour", qty: actualHours, unitPrice: 85, visible: true });
-  // Then materials
+  // Materials first for tools-mode closeout flow
   parts.filter(p => p.used).forEach((p, i) => {
     lines.push({ id: `inv-mat-${i}`, description: p.name, qty: p.quantity, unitPrice: p.unitPrice, visible: true });
   });
+  // Then labour
+  lines.push({ id: "inv-labour", description: "Labour", qty: actualHours, unitPrice: 85, visible: true });
   return lines;
 }
 
 export function SoleTraderCloseOutFlow({ open, onOpenChange, job, resumeAfterBooking, introMode = false, onChecklistComplete }: Props) {
   const navigate = useNavigate();
   const { updateJobStage } = useDemoData();
-  const { soleTraderPrefs } = useAppMode();
+  const { settings } = useUserSettings();
   const [step, setStep] = useState(resumeAfterBooking ? 1 : 0);
+  const [checklistOpen, setChecklistOpen] = useState(false);
 
   const initialJobSheet = useMemo(() => {
     const existingDescription = job.description?.trim();
@@ -221,7 +223,7 @@ export function SoleTraderCloseOutFlow({ open, onOpenChange, job, resumeAfterBoo
   const activeSteps = useMemo(() => {
     return ALL_STEPS.filter((s) => {
       if (introMode) {
-        return ["status", "time", "materials", "photos", "invoice"].includes(s.id);
+        return ["status", "materials", "time", "photos", "invoice"].includes(s.id);
       }
       // If coming back and NOT invoicing now, only show status + done
       if (!jobFinished && !invoiceNow) {
@@ -229,10 +231,10 @@ export function SoleTraderCloseOutFlow({ open, onOpenChange, job, resumeAfterBoo
       }
       if (["jobsheet", "send", "done"].includes(s.id)) return false;
       // Paperwork only if reconcileDocs pref is on
-      if (s.id === "paperwork" && !soleTraderPrefs.reconcileDocs) return false;
+      if (s.id === "paperwork" && !settings.reconcileDocs) return false;
       return true;
     });
-  }, [introMode, jobFinished, invoiceNow, soleTraderPrefs.reconcileDocs]);
+  }, [introMode, jobFinished, invoiceNow, settings.reconcileDocs]);
 
   const currentStep = activeSteps[step];
   const canNext = step < activeSteps.length - 1;
@@ -368,7 +370,7 @@ export function SoleTraderCloseOutFlow({ open, onOpenChange, job, resumeAfterBoo
               <div className="space-y-3">
                 <Label className="text-sm font-semibold">Is this job finished?</Label>
                 <div className="flex gap-2">
-                  <button onClick={() => setJobFinished(true)} className={cn("flex-1 py-3 rounded-lg border-2 text-sm font-medium transition-all", jobFinished ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-accent")}>
+                  <button onClick={() => { setJobFinished(true); setTimeout(() => goToStep(step + 1), 300); }} className={cn("flex-1 py-3 rounded-lg border-2 text-sm font-medium transition-all", jobFinished ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-accent")}>
                     <CheckCircle2 className="w-5 h-5 mx-auto mb-1" /> Job Finished
                   </button>
                   {!introMode && (
@@ -481,62 +483,79 @@ export function SoleTraderCloseOutFlow({ open, onOpenChange, job, resumeAfterBoo
 
           {/* ===== MATERIALS USED ===== */}
           {currentStep?.id === "materials" && (
-            <div className="space-y-3">
-              {soleTraderPrefs.vanStock && !introMode ? (
-                <p className="text-sm text-muted-foreground">Mark items as <strong>Van Stock</strong> or <strong>Supplier</strong>.</p>
-              ) : (
-                <p className="text-sm text-muted-foreground">List the parts and materials used on this job.</p>
-              )}
-              <div className="space-y-2 max-h-56 overflow-y-auto">
-                {parts.map((p, i) => (
-                  <div key={p.id} className={cn("p-2.5 rounded-lg border transition-colors space-y-2", p.used ? "bg-accent/20 border-border" : "bg-muted/20 border-transparent opacity-50")}>
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={p.used} onCheckedChange={(checked) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, used: !!checked } : pp))} />
-                      <span className={cn("text-sm flex-1 font-medium", !p.used && "line-through text-muted-foreground")}>{p.name}</span>
-                      <Input type="number" className="w-16 h-7 text-xs text-right" value={p.quantity} disabled={!p.used} onChange={(e) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, quantity: Number(e.target.value) || 0 } : pp))} />
-                      <span className="text-xs text-muted-foreground w-8">{p.unit}</span>
-                    </div>
-                    {p.used && soleTraderPrefs.vanStock && !introMode && (
-                      <div className="flex items-center gap-1.5 pl-6 flex-wrap">
-                        <button type="button" onClick={() => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, source: "van-stock" } : pp))} className={cn("flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors", p.source === "van-stock" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-muted text-muted-foreground hover:bg-accent")}>
-                          <Truck className="w-3 h-3" /> Van Stock
-                        </button>
-                        <button type="button" onClick={() => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, source: "supplier" } : pp))} className={cn("flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors", p.source === "supplier" ? "bg-[hsl(var(--status-orange)/0.15)] text-[hsl(var(--status-orange))] ring-1 ring-[hsl(var(--status-orange)/0.3)]" : "bg-muted text-muted-foreground hover:bg-accent")}>
-                          <ShoppingCart className="w-3 h-3" /> Supplier
-                        </button>
-                        {p.source === "supplier" && (
-                          <button type="button" onClick={() => { setReceiptTargetIdx(i); receiptInputRef.current?.click(); }} className={cn("flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-full border-2 border-dashed transition-all", p.receiptPhoto ? "border-primary/40 bg-primary/10 text-primary" : "border-muted-foreground/30 text-muted-foreground hover:border-primary/30 hover:bg-accent")}>
-                            <Camera className="w-3.5 h-3.5" />{p.receiptPhoto ? "Receipt Added ✓" : "Attach Receipt"}
-                          </button>
-                        )}
-                      </div>
-                    )}
-                    {p.used && soleTraderPrefs.vanStock && !introMode && p.source === "supplier" && (
-                      <Input className="h-7 text-xs ml-6 w-auto bg-white dark:bg-[hsl(30,12%,24%)] border-2 border-border text-gray-900 dark:text-gray-100 placeholder:text-gray-400" placeholder="Supplier name..." value={p.supplierName || ""} onChange={(e) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, supplierName: e.target.value } : pp))} />
-                    )}
-                  </div>
-                ))}
-              </div>
-              <div className="space-y-1.5 pt-1 border-t border-border">
-                <Label className="text-xs">Add extra item</Label>
+            <div className="flex flex-col -mx-4 -mt-2">
+              {/* Search pinned at top */}
+              <div className="sticky top-0 z-10 bg-popover px-4 pt-2 pb-2 space-y-1.5 border-b border-border">
+                <Label className="text-xs">Search pricebook or add manually</Label>
+                <MaterialSearch onSelect={(item) => {
+                  setParts((prev) => [...prev, {
+                    id: `extra-${Date.now()}`,
+                    name: item.name,
+                    quantity: 1,
+                    unit: "pcs",
+                    unitPrice: item.sell_price,
+                    supplier: item.supplier_name || "",
+                    used: true,
+                    source: "supplier" as const,
+                    supplierName: item.supplier_name,
+                  }]);
+                }} />
                 <div className="flex gap-2">
-                  <Input placeholder="Item name..." value={extraPartName} onChange={(e) => setExtraPartName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddExtra(); } }} className="flex-1" />
+                  <Input placeholder="Or type item name..." value={extraPartName} onChange={(e) => setExtraPartName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddExtra(); } }} className="flex-1" />
                   <Input type="number" placeholder="Qty" value={extraPartQty} onChange={(e) => setExtraPartQty(e.target.value)} className="w-16" />
                   <Button type="button" size="sm" onClick={handleAddExtra} disabled={!extraPartName.trim()}>Add</Button>
                 </div>
               </div>
-
-              {/* Inline Restock PO if vanStock is on and items used from van */}
-              {soleTraderPrefs.vanStock && !introMode && vanStockUsed.length > 0 && (
-                <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3 mt-2">
-                  <div className="flex items-center gap-2"><ClipboardList className="w-4 h-4 text-primary" /><p className="text-sm font-bold text-foreground">Restock PO</p></div>
-                  <div className="border-t border-border pt-2 space-y-1">
-                    <div className="grid grid-cols-[1fr_60px_50px] gap-2 text-[10px] font-semibold text-muted-foreground uppercase pb-1"><span>Item</span><span className="text-right">Qty</span><span className="text-right">Unit</span></div>
-                    {vanStockUsed.map((p) => (<div key={p.id} className="grid grid-cols-[1fr_60px_50px] gap-2 text-sm items-center"><span className="font-medium truncate">{p.name}</span><span className="text-right font-mono text-xs">{p.quantity}</span><span className="text-right text-xs text-muted-foreground">{p.unit}</span></div>))}
-                  </div>
-                  <div className="border-t border-border pt-2 flex items-center justify-between"><span className="text-xs text-muted-foreground">{vanStockUsed.length} items to restock</span><Badge variant="secondary" className="text-xs">Auto-generated</Badge></div>
+              {/* Items list */}
+              <div className="px-4 pt-2 space-y-3 overflow-y-auto flex-1">
+                {settings.vanStock && !introMode ? (
+                  <p className="text-sm text-muted-foreground">Mark items as <strong>Van Stock</strong> or <strong>Supplier</strong>.</p>
+                ) : (
+                  <p className="text-sm text-muted-foreground">List the parts and materials used on this job.</p>
+                )}
+                <div className="space-y-2">
+                  {parts.map((p, i) => (
+                    <div key={p.id} className={cn("p-2.5 rounded-lg border transition-colors space-y-2", p.used ? "bg-accent/20 border-border" : "bg-muted/20 border-transparent opacity-50")}>
+                      <div className="flex items-center gap-2">
+                        <Checkbox checked={p.used} onCheckedChange={(checked) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, used: !!checked } : pp))} />
+                        <span className={cn("text-sm flex-1 font-medium", !p.used && "line-through text-muted-foreground")}>{p.name}</span>
+                        <Input type="number" className="w-16 h-7 text-xs text-right" value={p.quantity} disabled={!p.used} onChange={(e) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, quantity: Number(e.target.value) || 0 } : pp))} />
+                        <span className="text-xs text-muted-foreground w-8">{p.unit}</span>
+                      </div>
+                      {p.used && settings.vanStock && !introMode && (
+                        <div className="flex items-center gap-1.5 pl-6 flex-wrap">
+                          <button type="button" onClick={() => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, source: "van-stock" } : pp))} className={cn("flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors", p.source === "van-stock" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-muted text-muted-foreground hover:bg-accent")}>
+                            <Truck className="w-3 h-3" /> Van Stock
+                          </button>
+                          <button type="button" onClick={() => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, source: "supplier" } : pp))} className={cn("flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors", p.source === "supplier" ? "bg-[hsl(var(--status-orange)/0.15)] text-[hsl(var(--status-orange))] ring-1 ring-[hsl(var(--status-orange)/0.3)]" : "bg-muted text-muted-foreground hover:bg-accent")}>
+                            <ShoppingCart className="w-3 h-3" /> Supplier
+                          </button>
+                          {p.source === "supplier" && (
+                            <button type="button" onClick={() => { setReceiptTargetIdx(i); receiptInputRef.current?.click(); }} className={cn("flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-full border-2 border-dashed transition-all", p.receiptPhoto ? "border-primary/40 bg-primary/10 text-primary" : "border-muted-foreground/30 text-muted-foreground hover:border-primary/30 hover:bg-accent")}>
+                              <Camera className="w-3.5 h-3.5" />{p.receiptPhoto ? "Receipt Added ✓" : "Attach Receipt"}
+                            </button>
+                          )}
+                        </div>
+                      )}
+                      {p.used && settings.vanStock && !introMode && p.source === "supplier" && (
+                        <Input className="h-7 text-xs ml-6 w-auto bg-white dark:bg-[hsl(30,12%,24%)] border-2 border-border text-gray-900 dark:text-gray-100 placeholder:text-gray-400" placeholder="Supplier name..." value={p.supplierName || ""} onChange={(e) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, supplierName: e.target.value } : pp))} />
+                      )}
+                    </div>
+                  ))}
                 </div>
-              )}
+
+                {/* Inline Restock PO if vanStock is on and items used from van */}
+                {settings.vanStock && !introMode && vanStockUsed.length > 0 && (
+                  <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-3 mt-2">
+                    <div className="flex items-center gap-2"><ClipboardList className="w-4 h-4 text-primary" /><p className="text-sm font-bold text-foreground">Restock PO</p></div>
+                    <div className="border-t border-border pt-2 space-y-1">
+                      <div className="grid grid-cols-[1fr_60px_50px] gap-2 text-[10px] font-semibold text-muted-foreground uppercase pb-1"><span>Item</span><span className="text-right">Qty</span><span className="text-right">Unit</span></div>
+                      {vanStockUsed.map((p) => (<div key={p.id} className="grid grid-cols-[1fr_60px_50px] gap-2 text-sm items-center"><span className="font-medium truncate">{p.name}</span><span className="text-right font-mono text-xs">{p.quantity}</span><span className="text-right text-xs text-muted-foreground">{p.unit}</span></div>))}
+                    </div>
+                    <div className="border-t border-border pt-2 flex items-center justify-between"><span className="text-xs text-muted-foreground">{vanStockUsed.length} items to restock</span><Badge variant="secondary" className="text-xs">Auto-generated</Badge></div>
+                  </div>
+                )}
+              </div>
             </div>
           )}
 
@@ -559,13 +578,13 @@ export function SoleTraderCloseOutFlow({ open, onOpenChange, job, resumeAfterBoo
             </div>
           )}
 
-          {/* ===== PHOTOS ===== */}
+          {/* ===== PHOTOS & CHECKLIST ===== */}
           {currentStep?.id === "photos" && (
             <div className="space-y-3">
               <Label>Job photos</Label>
               <div className="grid grid-cols-2 gap-2">
-                <Card className="border-dashed cursor-pointer" onClick={() => setActivePhotoType("before")}><CardContent className="p-6 flex flex-col items-center justify-center text-center"><Camera className="w-8 h-8 text-muted-foreground mb-2" /><p className="text-xs text-muted-foreground">Before photos</p><p className="text-xs font-medium text-primary mt-1">Tap to add</p></CardContent></Card>
-                <Card className="border-dashed cursor-pointer" onClick={() => setActivePhotoType("after")}><CardContent className="p-6 flex flex-col items-center justify-center text-center"><Camera className="w-8 h-8 text-muted-foreground mb-2" /><p className="text-xs text-muted-foreground">After photos</p><p className="text-xs font-medium text-primary mt-1">Tap to add</p></CardContent></Card>
+                <Card className="border-dashed cursor-pointer" onClick={() => setActivePhotoType("before")}><CardContent className="p-6 flex flex-col items-center justify-center text-center"><Camera className="w-8 h-8 text-muted-foreground mb-2" /><p className="text-xs text-muted-foreground">Initial Inspection</p><p className="text-xs font-medium text-primary mt-1">Tap to add</p></CardContent></Card>
+                <Card className="border-dashed cursor-pointer" onClick={() => setActivePhotoType("after")}><CardContent className="p-6 flex flex-col items-center justify-center text-center"><Camera className="w-8 h-8 text-muted-foreground mb-2" /><p className="text-xs text-muted-foreground">Completion Photos</p><p className="text-xs font-medium text-primary mt-1">Tap to add</p></CardContent></Card>
               </div>
               {activePhotoType && (
                 <div className="rounded-lg border border-border p-3 bg-accent/20 space-y-2">
@@ -578,12 +597,21 @@ export function SoleTraderCloseOutFlow({ open, onOpenChange, job, resumeAfterBoo
                 </div>
               )}
               {jobPhotos.length > 0 && (<div className="space-y-2"><p className="text-xs text-muted-foreground">{jobPhotos.length} photo(s) added</p><div className="flex gap-2 flex-wrap">{jobPhotos.map((photo) => (<div key={photo.id} className="relative"><img src={photo.dataUrl} alt={photo.type} className="w-16 h-16 rounded-lg object-cover border border-border" /><span className="absolute -top-1 -right-1 bg-primary text-primary-foreground text-[8px] px-1 rounded-full uppercase">{photo.type[0]}</span></div>))}</div></div>)}
-            </div>
-          )}
 
-          {/* ===== CHECKLIST ===== */}
-          {currentStep?.id === "checklist" && (
-            <ChecklistStepInline category="completion" onComplete={(cl) => onChecklistComplete?.(cl)} />
+              {/* Collapsible checklist */}
+              <Collapsible open={checklistOpen} onOpenChange={setChecklistOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full gap-2 text-muted-foreground">
+                    <ClipboardList className="w-4 h-4" />
+                    Checklist (optional)
+                    {checklistOpen ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <ChecklistStepInline category="completion" onComplete={(cl) => onChecklistComplete?.(cl)} />
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
           )}
 
           {/* ===== CERTIFICATES ===== */}

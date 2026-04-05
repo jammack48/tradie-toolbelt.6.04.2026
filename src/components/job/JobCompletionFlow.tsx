@@ -1,7 +1,9 @@
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
-import { Check, ChevronLeft, ChevronRight, Camera, Clock, Package, FileText, Shield, RotateCcw, FileImage, Truck, ShoppingCart, ClipboardList, Mic, MicOff, Maximize2, Minimize2, CheckCircle2, CalendarDays, Sparkles, Loader2 } from "lucide-react";
+import { Check, ChevronLeft, ChevronRight, Camera, Clock, Package, FileText, Shield, RotateCcw, FileImage, Truck, ShoppingCart, ClipboardList, Mic, MicOff, Maximize2, Minimize2, CheckCircle2, CalendarDays, Sparkles, Loader2, ChevronUp, ChevronDown } from "lucide-react";
+import { MaterialSearch } from "@/components/job/MaterialSearch";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -29,12 +31,11 @@ interface JobCompletionFlowProps {
 
 const STEPS = [
   { id: "status", label: "Job Status", icon: CheckCircle2 },
-  { id: "checklist", label: "Checklist", icon: ClipboardList },
+  { id: "photos", label: "Photos & Checklist", icon: Camera },
   { id: "jobsheet", label: "Job Sheet", icon: FileText },
-  { id: "time", label: "Time", icon: Clock },
   { id: "parts", label: "Parts Used", icon: Package },
+  { id: "time", label: "Time", icon: Clock },
   { id: "po-review", label: "Restock PO", icon: ClipboardList },
-  { id: "photos", label: "Photos", icon: Camera },
   { id: "compliance", label: "Compliance", icon: Shield },
 ];
 
@@ -126,6 +127,7 @@ export function JobCompletionFlow({ open, onOpenChange, job, resumeAfterBooking,
   const { updateJobStage } = useDemoData();
   const [step, setStep] = useState(resumeAfterBooking ? 1 : 0);
   const [jobFinished, setJobFinished] = useState(true);
+  const [checklistOpen, setChecklistOpen] = useState(false);
 
   const initialJobSheet = useMemo(() => {
     const existingDescription = job.description?.trim();
@@ -378,7 +380,7 @@ export function JobCompletionFlow({ open, onOpenChange, job, resumeAfterBooking,
               <div className="space-y-3">
                 <Label className="text-sm font-semibold">Is this job finished?</Label>
                 <div className="flex gap-2">
-                  <button onClick={() => setJobFinished(true)} className={cn("flex-1 py-3 rounded-lg border-2 text-sm font-medium transition-all", jobFinished ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-accent")}>
+                  <button onClick={() => { setJobFinished(true); setTimeout(() => setStep(s => s + 1), 300); }} className={cn("flex-1 py-3 rounded-lg border-2 text-sm font-medium transition-all", jobFinished ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-accent")}>
                     <CheckCircle2 className="w-5 h-5 mx-auto mb-1" /> Job Finished
                   </button>
                   <button onClick={() => setJobFinished(false)} className={cn("flex-1 py-3 rounded-lg border-2 text-sm font-medium transition-all", !jobFinished ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground hover:bg-accent")}>
@@ -541,103 +543,83 @@ export function JobCompletionFlow({ open, onOpenChange, job, resumeAfterBooking,
 
           {/* Parts */}
           {currentStep?.id === "parts" && (
-            <div className="space-y-3">
-              <p className="text-sm text-muted-foreground">
-                Mark source: <strong>Van Stock</strong> (generates restock PO) or <strong>Supplier</strong> (attach receipt).
-              </p>
-              <div className="space-y-2 max-h-56 overflow-y-auto">
-                {parts.map((p, i) => (
-                  <div key={p.id} className={cn(
-                    "p-2.5 rounded-lg border transition-colors space-y-2",
-                    p.used ? "bg-accent/20 border-border" : "bg-muted/20 border-transparent opacity-50"
-                  )}>
-                    <div className="flex items-center gap-2">
-                      <Checkbox checked={p.used} onCheckedChange={(checked) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, used: !!checked } : pp))} />
-                      <span className={cn("text-sm flex-1 font-medium", !p.used && "line-through text-muted-foreground")}>{p.name}</span>
-                      <Input type="number" className="w-16 h-7 text-xs text-right" value={p.quantity} disabled={!p.used} onChange={(e) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, quantity: Number(e.target.value) || 0 } : pp))} />
-                      <span className="text-xs text-muted-foreground w-8">{p.unit}</span>
-                    </div>
-                    {p.used && (
-                      <div className="flex items-center gap-1.5 pl-6 flex-wrap">
-                        <button
-                          type="button"
-                          onClick={() => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, source: "van-stock" } : pp))}
-                          className={cn("flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors", p.source === "van-stock" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-muted text-muted-foreground hover:bg-accent")}
-                        >
-                          <Truck className="w-3 h-3" /> Van Stock
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, source: "supplier" } : pp))}
-                          className={cn("flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors", p.source === "supplier" ? "bg-[hsl(var(--status-orange)/0.15)] text-[hsl(var(--status-orange))] ring-1 ring-[hsl(var(--status-orange)/0.3)]" : "bg-muted text-muted-foreground hover:bg-accent")}
-                        >
-                          <ShoppingCart className="w-3 h-3" /> Supplier
-                        </button>
-                        {p.source === "supplier" && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setReceiptTargetIdx(i);
-                              receiptInputRef.current?.click();
-                            }}
-                            className={cn(
-                              "flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-full border-2 border-dashed transition-all",
-                              p.receiptPhoto
-                                ? "border-primary/40 bg-primary/10 text-primary"
-                                : "border-muted-foreground/30 text-muted-foreground hover:border-primary/30 hover:bg-accent"
-                            )}
-                          >
-                            <Camera className="w-3.5 h-3.5" />
-                            {p.receiptPhoto ? "Receipt Added ✓" : "Attach Receipt"}
-                          </button>
-                        )}
-                        {p.source === "supplier" && p.receiptPhoto && (
-                          <img src={p.receiptPhoto} alt="Receipt" className="w-10 h-10 rounded object-cover border border-border" />
-                        )}
-                      </div>
-                    )}
-                    {p.used && p.source === "supplier" && (
-                      <Input className="h-7 text-xs ml-6 w-auto bg-white dark:bg-[hsl(30,12%,24%)] border-2 border-border text-gray-900 dark:text-gray-100 placeholder:text-gray-400" placeholder="Supplier name..." value={p.supplierName || ""} onChange={(e) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, supplierName: e.target.value } : pp))} />
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              {/* Add extra item */}
-              <div className="space-y-1.5 pt-1 border-t border-border">
-                <Label className="text-xs">Add extra item</Label>
+            <div className="flex flex-col -mx-4 -mt-2">
+              {/* Search pinned at top */}
+              <div className="sticky top-0 z-10 bg-popover px-4 pt-2 pb-2 space-y-1.5 border-b border-border">
+                <Label className="text-xs">Search pricebook or add manually</Label>
+                <MaterialSearch onSelect={(item) => {
+                  setParts((prev) => [...prev, {
+                    id: `extra-${Date.now()}`,
+                    name: item.name,
+                    quantity: 1,
+                    unit: "pcs",
+                    unitPrice: item.sell_price,
+                    supplier: item.supplier_name || "",
+                    used: true,
+                    source: "supplier" as const,
+                    supplierName: item.supplier_name,
+                  }]);
+                }} />
                 <div className="flex gap-2">
-                  <Input
-                    placeholder="Item name..."
-                    value={extraPartName}
-                    onChange={(e) => setExtraPartName(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddExtra(); } }}
-                    className="flex-1"
-                  />
-                  <Input
-                    type="number"
-                    placeholder="Qty"
-                    value={extraPartQty}
-                    onChange={(e) => setExtraPartQty(e.target.value)}
-                    className="w-16"
-                  />
-                  <Button type="button" size="sm" onClick={handleAddExtra} disabled={!extraPartName.trim()}>
-                    Add
-                  </Button>
+                  <Input placeholder="Or type item name..." value={extraPartName} onChange={(e) => setExtraPartName(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAddExtra(); } }} className="flex-1" />
+                  <Input type="number" placeholder="Qty" value={extraPartQty} onChange={(e) => setExtraPartQty(e.target.value)} className="w-16" />
+                  <Button type="button" size="sm" onClick={handleAddExtra} disabled={!extraPartName.trim()}>Add</Button>
                 </div>
               </div>
+              {/* Items list */}
+              <div className="px-4 pt-2 space-y-3 overflow-y-auto flex-1">
+                <p className="text-sm text-muted-foreground">
+                  Mark source: <strong>Van Stock</strong> (generates restock PO) or <strong>Supplier</strong> (attach receipt).
+                </p>
+                <div className="space-y-2">
+                  {parts.map((p, i) => (
+                    <div key={p.id} className={cn(
+                      "p-2.5 rounded-lg border transition-colors space-y-2",
+                      p.used ? "bg-accent/20 border-border" : "bg-muted/20 border-transparent opacity-50"
+                    )}>
+                      <div className="flex items-center gap-2">
+                        <Checkbox checked={p.used} onCheckedChange={(checked) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, used: !!checked } : pp))} />
+                        <span className={cn("text-sm flex-1 font-medium", !p.used && "line-through text-muted-foreground")}>{p.name}</span>
+                        <Input type="number" className="w-16 h-7 text-xs text-right" value={p.quantity} disabled={!p.used} onChange={(e) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, quantity: Number(e.target.value) || 0 } : pp))} />
+                        <span className="text-xs text-muted-foreground w-8">{p.unit}</span>
+                      </div>
+                      {p.used && (
+                        <div className="flex items-center gap-1.5 pl-6 flex-wrap">
+                          <button type="button" onClick={() => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, source: "van-stock" } : pp))} className={cn("flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors", p.source === "van-stock" ? "bg-primary/15 text-primary ring-1 ring-primary/30" : "bg-muted text-muted-foreground hover:bg-accent")}>
+                            <Truck className="w-3 h-3" /> Van Stock
+                          </button>
+                          <button type="button" onClick={() => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, source: "supplier" } : pp))} className={cn("flex items-center gap-1 text-[11px] font-medium px-2.5 py-1 rounded-full transition-colors", p.source === "supplier" ? "bg-[hsl(var(--status-orange)/0.15)] text-[hsl(var(--status-orange))] ring-1 ring-[hsl(var(--status-orange)/0.3)]" : "bg-muted text-muted-foreground hover:bg-accent")}>
+                            <ShoppingCart className="w-3 h-3" /> Supplier
+                          </button>
+                          {p.source === "supplier" && (
+                            <button type="button" onClick={() => { setReceiptTargetIdx(i); receiptInputRef.current?.click(); }} className={cn("flex items-center gap-1.5 text-[11px] font-medium px-3 py-1.5 rounded-full border-2 border-dashed transition-all", p.receiptPhoto ? "border-primary/40 bg-primary/10 text-primary" : "border-muted-foreground/30 text-muted-foreground hover:border-primary/30 hover:bg-accent")}>
+                              <Camera className="w-3.5 h-3.5" />{p.receiptPhoto ? "Receipt Added ✓" : "Attach Receipt"}
+                            </button>
+                          )}
+                          {p.source === "supplier" && p.receiptPhoto && (
+                            <img src={p.receiptPhoto} alt="Receipt" className="w-10 h-10 rounded object-cover border border-border" />
+                          )}
+                        </div>
+                      )}
+                      {p.used && p.source === "supplier" && (
+                        <Input className="h-7 text-xs ml-6 w-auto bg-white dark:bg-[hsl(30,12%,24%)] border-2 border-border text-gray-900 dark:text-gray-100 placeholder:text-gray-400" placeholder="Supplier name..." value={p.supplierName || ""} onChange={(e) => setParts((prev) => prev.map((pp, ii) => ii === i ? { ...pp, supplierName: e.target.value } : pp))} />
+                      )}
+                    </div>
+                  ))}
+                </div>
 
-              <div className="flex flex-wrap gap-2 pt-1">
-                {vanStockUsed.length > 0 && (
-                  <Badge variant="secondary" className="gap-1 text-xs">
-                    <Truck className="w-3 h-3" /> {vanStockUsed.length} van stock
-                  </Badge>
-                )}
-                {supplierItems.length > 0 && (
-                  <Badge variant="outline" className="gap-1 text-xs">
-                    <ShoppingCart className="w-3 h-3" /> {supplierItems.length} from supplier
-                  </Badge>
-                )}
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {vanStockUsed.length > 0 && (
+                    <Badge variant="secondary" className="gap-1 text-xs">
+                      <Truck className="w-3 h-3" /> {vanStockUsed.length} van stock
+                    </Badge>
+                  )}
+                  {supplierItems.length > 0 && (
+                    <Badge variant="outline" className="gap-1 text-xs">
+                      <ShoppingCart className="w-3 h-3" /> {supplierItems.length} from supplier
+                    </Badge>
+                  )}
+                </div>
               </div>
             </div>
           )}
@@ -687,7 +669,7 @@ export function JobCompletionFlow({ open, onOpenChange, job, resumeAfterBooking,
             </div>
           )}
 
-          {/* Photos */}
+          {/* Photos & Checklist */}
           {currentStep?.id === "photos" && (
             <div className="space-y-3">
               <Label>Job photos</Label>
@@ -695,14 +677,14 @@ export function JobCompletionFlow({ open, onOpenChange, job, resumeAfterBooking,
                 <Card className="border-dashed cursor-pointer" onClick={() => setActivePhotoType("before")}>
                   <CardContent className="p-6 flex flex-col items-center justify-center text-center">
                     <Camera className="w-8 h-8 text-muted-foreground mb-2" />
-                    <p className="text-xs text-muted-foreground">Before photos</p>
+                    <p className="text-xs text-muted-foreground">Initial Inspection</p>
                     <p className="text-xs font-medium text-primary mt-1">Tap to add</p>
                   </CardContent>
                 </Card>
                 <Card className="border-dashed cursor-pointer" onClick={() => setActivePhotoType("after")}>
                   <CardContent className="p-6 flex flex-col items-center justify-center text-center">
                     <Camera className="w-8 h-8 text-muted-foreground mb-2" />
-                    <p className="text-xs text-muted-foreground">After photos</p>
+                    <p className="text-xs text-muted-foreground">Completion Photos</p>
                     <p className="text-xs font-medium text-primary mt-1">Tap to add</p>
                   </CardContent>
                 </Card>
@@ -730,12 +712,21 @@ export function JobCompletionFlow({ open, onOpenChange, job, resumeAfterBooking,
                   </div>
                 </div>
               )}
-            </div>
-          )}
 
-          {/* Checklist */}
-          {currentStep?.id === "checklist" && (
-            <ChecklistStepInline category="completion" onComplete={(cl) => onChecklistComplete?.(cl)} />
+              {/* Collapsible checklist */}
+              <Collapsible open={checklistOpen} onOpenChange={setChecklistOpen}>
+                <CollapsibleTrigger asChild>
+                  <Button variant="outline" size="sm" className="w-full gap-2 text-muted-foreground">
+                    <ClipboardList className="w-4 h-4" />
+                    Checklist (optional)
+                    {checklistOpen ? <ChevronUp className="w-4 h-4 ml-auto" /> : <ChevronDown className="w-4 h-4 ml-auto" />}
+                  </Button>
+                </CollapsibleTrigger>
+                <CollapsibleContent className="pt-2">
+                  <ChecklistStepInline category="completion" onComplete={(cl) => onChecklistComplete?.(cl)} />
+                </CollapsibleContent>
+              </Collapsible>
+            </div>
           )}
 
           {/* Compliance */}

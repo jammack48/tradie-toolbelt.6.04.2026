@@ -172,15 +172,17 @@ export function StageColumn({ stage, jobs, isExpanded, onToggle, onNext, layout 
       <TutorialTip tip={STAGE_TIPS[stage] || `Click to expand ${stage}`} side="top">
         <div
           onClick={onToggle}
-          className="relative px-3 py-2 flex items-start justify-between text-primary-foreground font-bold text-sm h-[52px] cursor-pointer"
+          className="relative px-3 py-2 flex items-start justify-between text-primary-foreground font-bold text-sm min-h-[52px] cursor-pointer"
           style={{
             backgroundColor: "hsl(var(--stage-header))",
             backgroundImage: "repeating-linear-gradient(-45deg, transparent, transparent 8px, hsl(var(--border) / 0.2) 8px, hsl(var(--border) / 0.2) 9px)",
           }}
         >
           <div className="leading-snug min-w-0">
-            <div className="truncate">{(STAGE_LABELS[stage as keyof typeof STAGE_LABELS] ?? [stage])[0]}</div>
-            <div className="text-xs font-medium opacity-70 truncate h-[16px]">
+            <span className="break-words">
+              {(STAGE_LABELS[stage as keyof typeof STAGE_LABELS] ?? [stage])[0]}
+            </span>
+            <div className="text-xs font-medium opacity-70 break-words mt-0.5">
               {STAGE_LABELS[stage as keyof typeof STAGE_LABELS]?.[1] ?? "\u00A0"}
             </div>
           </div>

@@ -4,7 +4,9 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useAppMode } from "@/contexts/AppModeContext";
+import { useUserSettings } from "@/contexts/UserSettingsContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { toast } from "@/hooks/use-toast";
 
 const THEMES: { id: Theme; label: string; color: string; darkColor: string }[] = [
   { id: "earthy",  label: "Earthy",  color: "#6b8f71",  darkColor: "#5a7a5f" },
@@ -37,7 +39,21 @@ function RiserIcon({ className }: { className?: string }) {
 
 export function ThemePicker() {
   const { theme, setTheme, isDark, setIsDark } = useTheme();
-  const { isIntroMode } = useAppMode();
+  const { saveSettings } = useUserSettings();
+  const { user } = useAuth();
+
+  const handlePersist = async (save: () => Promise<void>) => {
+    if (!user) {
+      toast({ title: "Sign in required", description: "Sign in to sync theme settings.", variant: "destructive" });
+      return;
+    }
+    try {
+      await save();
+    } catch (error) {
+      console.error("Failed to save theme settings", error);
+      toast({ title: "Couldn’t save theme", description: "Please try again.", variant: "destructive" });
+    }
+  };
 
   return (
     <Popover>
@@ -45,7 +61,7 @@ export function ThemePicker() {
         <Button
           variant="ghost"
           size="sm"
-          className={cn("h-8 w-8 p-0", isIntroMode && "animate-pulse ring-2 ring-primary/70 ring-offset-1 ring-offset-background")}
+          className="h-8 w-8 p-0"
           title="Change theme"
         >
           <RiserIcon />
@@ -58,9 +74,13 @@ export function ThemePicker() {
             <button
               key={t.id}
               title={t.label}
-              onClick={() => setTheme(t.id)}
+              onClick={() => {
+                setTheme(t.id);
+                void handlePersist(() => saveSettings({ theme: t.id }));
+              }}
+              disabled={!user}
               className={cn(
-                "group flex flex-col items-center gap-1.5 focus:outline-none"
+                "group flex flex-col items-center gap-1.5 focus:outline-none disabled:opacity-50"
               )}
             >
               <span
@@ -86,7 +106,14 @@ export function ThemePicker() {
             {isDark ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
             {isDark ? "Dark" : "Light"}
           </div>
-          <Switch checked={isDark} onCheckedChange={setIsDark} />
+          <Switch
+            checked={isDark}
+            disabled={!user}
+            onCheckedChange={(value) => {
+              setIsDark(value);
+              void handlePersist(() => saveSettings({ isDark: value }));
+            }}
+          />
         </div>
       </PopoverContent>
     </Popover>

@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useMemo } from "react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
 import { DollarSign, Plus, Send, Save, X, ChevronDown, ChevronUp, Package, Search, Percent, RotateCcw, Trash2, GripVertical } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -17,6 +17,8 @@ import type { JobDetail } from "@/data/dummyJobDetails";
 import { catalogueItems, bundleTemplates } from "@/data/dummyJobDetails";
 import { coverLetterTemplates } from "@/data/coverLetterTemplates";
 import { QuotePreview } from "@/components/quote/QuotePreview";
+import { useAuth } from "@/contexts/AuthContext";
+import { searchSupplierItems, type SupplierItem } from "@/services/supplierService";
 
 interface LineItem {
   id: string;
@@ -128,6 +130,36 @@ function BlockSection({ label, items, section, isOpen, onToggle, onUpdate, onDel
 
 /* ── Main QuoteTab ──────────────────────────────────────── */
 export function QuoteTab({ job, initialBundle, initialDescription, beforeActions, onSendQuote }: QuoteTabProps) {
+  const { isDemo } = useAuth();
+  const [dbMaterials, setDbMaterials] = useState<Array<{ id: string; name: string; quantity: number; unitPrice: number; unit: string; supplier: string; section: Section }>>([]);
+  const [materialSearchQuery, setMaterialSearchQuery] = useState("");
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Search supplier_items from DB in production mode
+  useEffect(() => {
+    if (isDemo || !materialSearchQuery || materialSearchQuery.length < 2) {
+      setDbMaterials([]);
+      return;
+    }
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(async () => {
+      try {
+        const items = await searchSupplierItems(materialSearchQuery);
+        setDbMaterials(items.map((item) => ({
+          id: item.id,
+          name: `${item.name}${item.supplier_name ? ` (${item.supplier_name})` : ""}`,
+          quantity: 1,
+          unitPrice: item.sell_price,
+          unit: "ea",
+          supplier: item.supplier_name ?? "",
+          section: "materials" as Section,
+        })));
+      } catch (e) {
+        console.error("Supplier search failed", e);
+      }
+    }, 300);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [materialSearchQuery, isDemo]);
   const mkItem = (name: string, qty: number, unitPrice: number): LineItem => ({
     id: genId(), name, qty, unitPrice, sellPrice: unitPrice, markup: 0,
   });
@@ -347,7 +379,7 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
   const grandTotal = sellSubtotal + gst;
 
   const labourCatalogue = catalogueItems.filter((i) => i.section === "labour");
-  const materialsCatalogue = catalogueItems.filter((i) => i.section === "materials");
+  const materialsCatalogue = isDemo ? catalogueItems.filter((i) => i.section === "materials") : dbMaterials;
   const extrasCatalogue = catalogueItems.filter((i) => i.section === "extras");
 
   return (
@@ -542,10 +574,10 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
       </div>
 
       {/* ── Section-filtered command palette dialog ──────── */}
-      <Dialog open={paletteOpen} onOpenChange={(open) => { setPaletteOpen(open); if (!open) { setPaletteSection(null); setPaletteBlockId(null); } }}>
+      <Dialog open={paletteOpen} onOpenChange={(open) => { setPaletteOpen(open); if (!open) { setPaletteSection(null); setPaletteBlockId(null); setMaterialSearchQuery(""); } }}>
         <DialogContent className="p-0 max-w-md">
-          <Command>
-            <CommandInput placeholder={`Search ${paletteSection ?? "all"} items…`} />
+          <Command shouldFilter={isDemo || paletteSection !== "materials"}>
+            <CommandInput placeholder={`Search ${paletteSection ?? "all"} items…`} onValueChange={(val) => { if (!isDemo && paletteSection === "materials") setMaterialSearchQuery(val); }} />
             <CommandList>
               <CommandEmpty>
                 <button className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent rounded-sm" onClick={() => { if (paletteBlockId) addBlankTo(paletteBlockId, paletteSection ?? "materials"); setPaletteOpen(false); setPaletteSection(null); setPaletteBlockId(null); }}>+ Add as custom item</button>

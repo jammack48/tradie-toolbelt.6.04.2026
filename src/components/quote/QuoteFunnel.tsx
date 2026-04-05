@@ -122,15 +122,20 @@ function StepCustomer({ onSelect, onSkip, label = "quote", customers }: { onSele
 /* ── Step 2: Confirm Address ───────────────────────────── */
 function StepAddress({
   address,
+  customerAddress,
   onAddressChange,
   onNext,
   onBack,
 }: {
   address: string;
+  customerAddress: string;
   onAddressChange: (v: string) => void;
   onNext: () => void;
   onBack: () => void;
 }) {
+  const [useDifferent, setUseDifferent] = useState(false);
+  const hasCustomerAddress = customerAddress.trim().length > 0;
+
   return (
     <div className="space-y-6">
       <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
@@ -139,15 +144,40 @@ function StepAddress({
 
       <h2 className="text-lg font-bold text-card-foreground">Site Address</h2>
 
-      <Input
-        value={address}
-        onChange={(e) => onAddressChange(e.target.value)}
-        placeholder="Enter site address…"
-        className="h-12"
-        autoFocus
-      />
+      {hasCustomerAddress && !useDifferent ? (
+        <div className="space-y-3">
+          <div className="rounded-lg border border-primary/30 bg-primary/5 p-4">
+            <p className="text-xs text-muted-foreground mb-1">Customer address</p>
+            <p className="text-sm font-medium text-card-foreground">{customerAddress}</p>
+          </div>
+          <button
+            onClick={() => { setUseDifferent(true); onAddressChange(""); }}
+            className="text-sm text-primary hover:underline cursor-pointer"
+          >
+            Use a different address
+          </button>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          <Input
+            value={address}
+            onChange={(e) => onAddressChange(e.target.value)}
+            placeholder="Enter site address…"
+            className="h-12"
+            autoFocus
+          />
+          {hasCustomerAddress && (
+            <button
+              onClick={() => { setUseDifferent(false); onAddressChange(customerAddress); }}
+              className="text-sm text-primary hover:underline cursor-pointer"
+            >
+              Use customer address
+            </button>
+          )}
+        </div>
+      )}
 
-      <Button className="w-full h-12 gap-2" onClick={onNext}>
+      <Button className="w-full h-12 gap-2" onClick={onNext} disabled={!address.trim()}>
         Next <ArrowRight className="w-4 h-4" />
       </Button>
     </div>
@@ -349,6 +379,7 @@ export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initial
       {step === 2 && (
         <StepAddress
           address={address}
+          customerAddress={customer?.address || ""}
           onAddressChange={setAddress}
           onNext={() => setStep(3)}
           onBack={() => setStep(1)}

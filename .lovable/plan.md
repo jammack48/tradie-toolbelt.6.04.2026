@@ -1,106 +1,41 @@
 
-## Goal
-Make the backend connection issue diagnosable in one place and remove the guesswork around which key Render should use.
 
-## What’s happening now
-- The FastAPI backend reads:
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_KEY`
-- It then calls `create_client(url, key)` in `backend/main.py`.
-- The frontend only sees `connected / offline`, so there’s not enough detail to tell whether the failure is:
-  - missing env vars
-  - wrong URL
-  - wrong key type
-  - malformed key / whitespace
-  - SDK incompatibility
+## Plan: Migrate to Company-Based Multi-User Architecture
 
-## Important answer: which key?
-For the current backend code, the safest key to use is:
+All tables have been renamed and RLS now uses `company_id` instead of `user_id`. The app currently references old table names and filters by `user_id`, so production data appears empty.
 
-- **Supabase Dashboard → API Keys → “Legacy anon, service_role API keys” → `service_role`**
-- It should be the **long JWT-style key** starting with `eyJ...`
+### Changes
 
-Do **not** use:
-- the **publishable** key
-- the new `sb_secret_...` key for this current Python health-check path unless we explicitly refactor/test support for it
+**1. `src/lib/modeTable.ts`** — Flip naming convention
+- `{base}_demo` → `demo_{base}`
+- `{base}_prod` → `prod_{base}`
 
-## Plan
+**2. `src/services/supplierService.ts`** — Rename tables, clean interface
+- `"suppliers"` → `"prod_suppliers"` (6 occurrences)
+- `"supplier_items"` → `"prod_supplier_items"` (2 occurrences)
+- Remove `user_id` from `Supplier` interface (keep field in DB for audit, just remove from TypeScript type since it's no longer used for filtering)
 
-### 1. Add structured backend diagnostics
-Update `backend/main.py` so `/health` returns a safe debug object like:
-- whether `SUPABASE_URL` exists
-- whether `SUPABASE_SERVICE_KEY` exists
-- detected key type:
-  - `legacy_jwt`
-  - `new_secret`
-  - `unknown`
-- masked key preview only (example: `eyJ...abcd`, never full secret)
-- exact exception class/message when connection fails
-- whether the client was created successfully
-- whether the DB ping succeeded
+**3. `src/services/supplierImportService.ts`** — Rename tables
+- `"supplier_items"` → `"prod_supplier_items"` (2 occurrences)
+- `"suppliers"` → `"prod_suppliers"` (1 occurrence)
 
-This will let the frontend show the real failure reason instead of just “DB offline”.
+**4. `src/services/jobMaterialsService.ts`** — Rename tables
+- `"job_materials"` → `"prod_job_materials"` (4 occurrences)
+- Join references `supplier_items` → `prod_supplier_items` and `suppliers` → `prod_suppliers` in the `.select()` join syntax
 
-### 2. Make the health check more explicit
-Refine the check so the backend distinguishes:
-- `not_configured`
-- `invalid_key`
-- `client_init_failed`
-- `connected`
-- `offline`
-- `query_failed`
+**5. `src/contexts/UserSettingsContext.tsx`** — Rename table, fix upsert
+- `"user_settings"` → `"prod_user_settings"` (2 occurrences)
+- **Remove** `.eq("user_id", user.id)` from the SELECT query (RLS handles it)
+- **Keep** `user_id: user.id` in the upsert payload (it's part of the composite unique key `company_id + user_id`)
+- **Do NOT** pass `company_id` (DB default handles it)
 
-That way you’ll know if the problem is the key itself vs a later query failure.
+### Files NOT changed (auto-fixed by step 1)
+These all use `getTable()`, so the prefix flip fixes them automatically:
+- `src/services/dbDemoService.ts`
+- `src/services/customerImportService.ts`
+- `src/services/variationsService.ts`
+- `src/services/servicingService.ts`
 
-### 3. Surface the detailed diagnostics in the UI
-Update the backend status/log UI so it shows:
-- server status
-- DB status
-- detected key type
-- last error message
-- env var presence summary
+### No backend changes needed
+The FastAPI backend passes the auth token — RLS handles everything server-side too.
 
-Example log lines:
-- `SUPABASE_URL found`
-- `SUPABASE_SERVICE_KEY found (type: new_secret)`
-- `Supabase client init failed: Invalid API key`
-- `Expected key type: legacy service_role JWT`
-
-### 4. Add a dedicated debug section in the panel
-Extend `BackendLogPanel` with a compact “Connection Debug” block showing:
-- URL configured: yes/no
-- key configured: yes/no
-- key type: legacy_jwt / new_secret / unknown
-- last backend error
-- last successful ping time
-
-This gives you a single on-screen source of truth.
-
-### 5. Document the exact Render setup in README
-Add a short “Standalone DB connection” note to `README.md`:
-- `SUPABASE_URL = https://sbthgkcmbxjgaqvntjja.supabase.co`
-- `SUPABASE_SERVICE_KEY = legacy service_role JWT key from API Keys page`
-- note that the current backend health check does **not** use the publishable key
-- note that the new `sb_secret_...` key may not work with the current Python setup
-
-## Files to change
-- `backend/main.py`
-  - add safe env/key diagnostics
-  - return structured health response
-- `src/contexts/BackendContext.tsx`
-  - parse new debug fields from `/health`
-  - store last error / key type / env presence
-- `src/components/BackendLogPanel.tsx`
-  - display detailed diagnostics
-- `src/components/BackendStatus.tsx`
-  - optionally improve tooltip text with DB reason
-- `README.md`
-  - document the correct key source and current expectation
-
-## Expected result
-After this change, the app will no longer just say “DB offline”. It will tell you something like:
-- `Key type detected: new_secret`
-- `Client init failed: Invalid API key`
-- `Expected: legacy service_role JWT from API Keys > Legacy anon, service_role`
-
-That will make the fix immediate and remove the key confusion.

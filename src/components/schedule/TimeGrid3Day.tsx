@@ -4,7 +4,6 @@ import { cn } from "@/lib/utils";
 import { ScheduleJob, WORK_START, WORK_END, HOUR_HEIGHT_DESKTOP, formatTime, generateWeekJobs } from "./scheduleData";
 import { ScheduleJobCard } from "./ScheduleJobCard";
 import { fetchVariationCounts } from "@/services/variationsService";
-import { useAppMode } from "@/contexts/AppModeContext";
 
 interface TimeGrid3DayProps {
   dates: Date[];
@@ -13,7 +12,7 @@ interface TimeGrid3DayProps {
   onSwipe?: (direction: "left" | "right") => void;
   /** Optional external jobs list — if provided, skips internal generateWeekJobs */
   jobs?: ScheduleJob[];
-  onSlotClick?: (dayOffset: number, hour: number) => void;
+  onSlotClick?: (dayOffset: number, hour: number, staffName?: string) => void;
   activeSlot?: { dayOffset: number; startHour: number } | null;
   activeDuration?: number;
 }
@@ -45,7 +44,6 @@ function computeOverlapLayout(jobs: ScheduleJob[]) {
 }
 
 export function TimeGrid3Day({ dates, staffFilter, selectedDate, onSwipe, jobs: externalJobs, onSlotClick, activeSlot, activeDuration }: TimeGrid3DayProps) {
-  const { trade } = useAppMode();
   const [variationCounts, setVariationCounts] = useState<Record<string, number>>({});
   const hours = Array.from({ length: WORK_END - WORK_START }, (_, i) => WORK_START + i);
   const totalHeight = hours.length * HOUR_HEIGHT_DESKTOP;
@@ -82,7 +80,7 @@ export function TimeGrid3Day({ dates, staffFilter, selectedDate, onSwipe, jobs: 
       const ws = startOfWeek(date, { weekStartsOn: 1 });
       const key = ws.toISOString();
       if (!weekCache.has(key)) {
-        let jobs = generateWeekJobs(ws, trade);
+        let jobs = generateWeekJobs(ws);
         if (staffFilter) jobs = jobs.filter(j => j.assignedTo === staffFilter);
         weekCache.set(key, jobs);
       }

@@ -1,4 +1,6 @@
 import { supabase } from "@/lib/supabase";
+import { getTable } from "@/lib/modeTable";
+import { getIsDemoMode } from "@/lib/modeState";
 
 export interface ServiceReminder {
   id: number;
@@ -19,7 +21,7 @@ export type NewReminder = Omit<ServiceReminder, "id" | "created_at">;
 
 export async function fetchReminders(): Promise<ServiceReminder[]> {
   const { data, error } = await supabase
-    .from("service_reminders")
+    .from(getTable("service_reminders", getIsDemoMode()))
     .select("*")
     .order("due_date", { ascending: true });
 
@@ -29,7 +31,7 @@ export async function fetchReminders(): Promise<ServiceReminder[]> {
 
 export async function addReminder(r: NewReminder): Promise<ServiceReminder> {
   const { data, error } = await supabase
-    .from("service_reminders")
+    .from(getTable("service_reminders", getIsDemoMode()))
     .insert(r)
     .select("*")
     .single();
@@ -41,7 +43,7 @@ export async function addReminder(r: NewReminder): Promise<ServiceReminder> {
 export async function addRemindersBulk(reminders: NewReminder[]): Promise<void> {
   for (let i = 0; i < reminders.length; i += 20) {
     const batch = reminders.slice(i, i + 20);
-    const { error } = await supabase.from("service_reminders").insert(batch);
+    const { error } = await supabase.from(getTable("service_reminders", getIsDemoMode())).insert(batch);
     if (error) console.error("Bulk insert error:", error);
   }
 }
@@ -55,7 +57,7 @@ export async function updateReminderStatus(
   if (jobId) updates.job_id = jobId;
 
   const { error } = await supabase
-    .from("service_reminders")
+    .from(getTable("service_reminders", getIsDemoMode()))
     .update(updates)
     .eq("id", id);
 
@@ -64,7 +66,7 @@ export async function updateReminderStatus(
 
 export async function deleteReminder(id: number): Promise<void> {
   const { error } = await supabase
-    .from("service_reminders")
+    .from(getTable("service_reminders", getIsDemoMode()))
     .delete()
     .eq("id", id);
 

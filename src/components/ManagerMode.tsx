@@ -51,12 +51,12 @@ const STAGE_ACTIONS: Record<string, ActionDef[]> = {
     { label: "Add Note", icon: StickyNote, action: "note" },
     { label: "Resend Quote", icon: Send, action: "resent" },
     { label: "Call Back", icon: Phone, action: "callback" },
-    { label: "Mark Accepted", icon: CheckCircle, action: "accepted" },
+    { label: "Move to Quote Accepted", icon: CheckCircle, action: "accepted" },
     { label: "Open Quote", icon: ExternalLink, action: "open" },
   ],
   "Quote Accepted": [
     { label: "Add Note", icon: StickyNote, action: "note" },
-    { label: "Schedule Job", icon: CalendarDays, action: "scheduled" },
+    { label: "Move to Scheduled/In Progress", icon: CalendarDays, action: "scheduled" },
     { label: "Call Back", icon: Phone, action: "callback" },
     { label: "Open Job", icon: ExternalLink, action: "open" },
   ],
@@ -325,6 +325,8 @@ export function ManagerMode({ initialStage, initialPriority, initialIndex }: Man
   const [activePriority, setActivePriority] = useState<PriorityColor>(initialPriority || "red");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [viewMode, setViewMode] = useState<ViewMode>("swipe");
+  const [focusedJobId, setFocusedJobId] = useState<string | null>(null);
+  const guidedFlow = true;
 
   const thresholds = getThresholds(activeStage);
   const stageJobs = jobsByStage(activeStage);
@@ -348,9 +350,18 @@ export function ManagerMode({ initialStage, initialPriority, initialIndex }: Man
   }, [emblaApi, onSelect]);
 
   useEffect(() => {
-    emblaApi?.scrollTo(0);
-    setCurrentIndex(0);
-  }, [activeStage, activePriority, emblaApi]);
+    if (!emblaApi) return;
+    if (!focusedJobId) {
+      emblaApi.scrollTo(0);
+      setCurrentIndex(0);
+      return;
+    }
+
+    const focusedIndex = filteredJobs.findIndex((job) => job.id === focusedJobId);
+    const nextIndex = focusedIndex >= 0 ? focusedIndex : 0;
+    emblaApi.scrollTo(nextIndex);
+    setCurrentIndex(nextIndex);
+  }, [activeStage, activePriority, emblaApi, focusedJobId, filteredJobs]);
 
   // Scroll to initial index after embla is ready
   useEffect(() => {
@@ -360,14 +371,17 @@ export function ManagerMode({ initialStage, initialPriority, initialIndex }: Man
     }
   }, [emblaApi]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const managerNavState = { fromManager: true, stage: activeStage, priority: activePriority, slideIndex: currentIndex };
+  const managerNavState = { fromManager: true, stage: activeStage, priority: activePriority, slideIndex: currentIndex, guidedFlow };
 
   const handleAction = (job: Job, action: string, actionDef: ActionDef) => {
     if (action === "open") {
+      const jobIndex = filteredJobs.findIndex((j) => j.id === job.id);
+      const slideIndex = jobIndex >= 0 ? jobIndex : currentIndex;
+      const navState = { ...managerNavState, jobId: job.id, slideIndex };
       const earlyStages = ["Lead", "To Quote", "Quote Sent"];
-      if (earlyStages.includes(activeStage)) navigate(`/quote/${job.id}`, { state: managerNavState });
-      else if (["Invoiced", "Invoice Paid"].includes(activeStage)) navigate(`/invoice/${job.id}`, { state: managerNavState });
-      else navigate(`/job/${job.id}`, { state: managerNavState });
+      if (earlyStages.includes(activeStage)) navigate(`/quote/${job.id}`, { state: navState });
+      else if (["Invoiced", "Invoice Paid"].includes(activeStage)) navigate(`/invoice/${job.id}`, { state: navState });
+      else navigate(`/job/${job.id}`, { state: navState });
       return;
     }
     const jobNote = notes[job.id] || "";
@@ -390,6 +404,10 @@ export function ManagerMode({ initialStage, initialPriority, initialIndex }: Man
 
     const nextStage = stageMap[action];
     if (nextStage) {
+      setFocusedJobId(job.id);
+      const nextThresholds = getThresholds(nextStage);
+      setActiveStage(nextStage);
+      setActivePriority(getJobColor(job, nextThresholds.greenMax, nextThresholds.orangeMax));
       updateJobStage(job.id, nextStage);
     }
 

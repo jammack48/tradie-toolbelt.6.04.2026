@@ -1,5 +1,4 @@
 import { jobs } from "./dummyJobs";
-import type { DemoJob } from "@/types/demoData";
 
 export interface StaffMember {
   name: string;
@@ -245,7 +244,7 @@ export function getJobDetail(jobId: string, overrides?: { client?: string; addre
       startDate: "Mon 10 Feb 2025",
       dueDate: "Fri 21 Feb 2025",
       staff: staffPool.slice(0, staffCount),
-      materials: materialsPool.slice(0, matCount),
+      materials: [],
       notes: notesPool.slice(0, (idx % 3) + 1),
       photos: photosPool.slice(0, (idx % 3) + 2),
       timeEntries: timePool.slice(0, (idx % 3) + 1),
@@ -277,7 +276,7 @@ export function getJobDetail(jobId: string, overrides?: { client?: string; addre
       startDate: "Mon 10 Feb 2025",
       dueDate: "Fri 21 Feb 2025",
       staff: staffPool.slice(0, staffCount),
-      materials: materialsPool.slice(0, matCount),
+      materials: [],
       notes: notesPool.slice(0, (seed % 3) + 1),
       photos: photosPool.slice(0, (seed % 3) + 2),
       timeEntries: timePool.slice(0, (seed % 3) + 1),
@@ -303,7 +302,7 @@ export function getJobDetail(jobId: string, overrides?: { client?: string; addre
     startDate: "Mon 10 Feb 2025",
     dueDate: "Fri 21 Feb 2025",
     staff: staffPool.slice(0, staffCount),
-    materials: materialsPool.slice(0, matCount),
+    materials: [],
     notes: notesPool.slice(0, (idx % 3) + 2),
     photos: photosPool.slice(0, (idx % 3) + 3),
     timeEntries: timePool.slice(0, (idx % 3) + 3),
@@ -336,45 +335,5 @@ export function getNewJobDetail(stage: string): JobDetail {
     invoiceStatus: "Draft",
     labourTotal: 0,
     extrasTotal: 0,
-  };
-}
-
-/**
- * Generate a full JobDetail from a DemoJob loaded from the database.
- * Uses a simple hash of the job ID as a stable seed so the same job
- * always produces the same detail data.
- */
-export function getJobDetailFromDemoJob(demoJob: DemoJob): JobDetail {
-  const seed = demoJob.id.split("").reduce((acc, ch) => acc + ch.charCodeAt(0), 0);
-  const staffCount = (seed % 3) + 1;
-  const matCount = (seed % 4) + 2;
-  const noteCount = (seed % 3) + 1;
-  const photoCount = (seed % 3) + 2;
-  const timeCount = (seed % 3) + 1;
-
-  const firstName = demoJob.client.split(" ")[0].toLowerCase();
-
-  return {
-    id: demoJob.id,
-    jobName: demoJob.jobName,
-    client: demoJob.client,
-    clientPhone: `021 ${300 + (seed % 100)} ${1000 + (seed % 100)}`,
-    clientEmail: `${firstName}@email.co.nz`,
-    address: addresses[seed % addresses.length],
-    value: demoJob.value,
-    stage: demoJob.stage,
-    ageDays: demoJob.ageDays,
-    urgent: demoJob.urgent,
-    description: `${demoJob.jobName} at ${addresses[seed % addresses.length]}. Standard residential job.`,
-    startDate: "Mon 10 Feb 2025",
-    dueDate: "Fri 21 Feb 2025",
-    staff: staffPool.slice(0, staffCount),
-    materials: materialsPool.slice(0, matCount),
-    notes: notesPool.slice(0, noteCount),
-    photos: photosPool.slice(0, photoCount),
-    timeEntries: timePool.slice(0, timeCount),
-    invoiceStatus: seed % 3 === 0 ? "Paid" : seed % 3 === 1 ? "Sent" : "Draft",
-    labourTotal: timePool.slice(0, timeCount).reduce((s, t) => s + t.hours * 85, 0),
-    extrasTotal: (seed % 5) * 75,
   };
 }

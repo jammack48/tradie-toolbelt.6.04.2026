@@ -1,0 +1,1 @@
+ALTER TABLE public.customers RENAME TO customers_demo;

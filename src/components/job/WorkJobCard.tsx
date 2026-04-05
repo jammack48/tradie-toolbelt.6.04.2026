@@ -24,51 +24,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchVariationCounts } from "@/services/variationsService";
 import { formatJobNumber } from "@/lib/jobNumber";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import type { MaterialItem } from "@/data/dummyJobDetails";
+import { MaterialsTab } from "@/components/job/MaterialsTab";
 import type { CompletedChecklist } from "@/data/dummyChecklists";
 
 type WorkJobTab = "overview" | "scope" | "time" | "materials" | "notes" | "photos" | "forms" | "variations";
-
-function WorkMaterialsTab({ materials, showPricing }: { materials: MaterialItem[]; showPricing?: boolean }) {
-  return (
-    <Card>
-      <CardHeader className="pb-3 flex flex-row items-center justify-between">
-        <CardTitle className="text-base">Materials Used</CardTitle>
-        <Button size="sm" className="h-9 gap-1.5">
-          <Plus className="w-4 h-4" /> Add Item
-        </Button>
-      </CardHeader>
-      <CardContent>
-        {materials.length === 0 ? (
-          <p className="text-sm text-muted-foreground py-8 text-center">No materials added yet</p>
-        ) : (
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Item</TableHead>
-                <TableHead className="text-right w-20">Qty</TableHead>
-                <TableHead className="w-20">Unit</TableHead>
-                {showPricing && <TableHead className="text-right w-24">Cost</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {materials.map((m) => (
-                <TableRow key={m.id}>
-                  <TableCell className="font-medium">{m.name}</TableCell>
-                  <TableCell className="text-right">{m.quantity}</TableCell>
-                  <TableCell className="text-muted-foreground">{m.unit}</TableCell>
-                  {showPricing && (
-                    <TableCell className="text-right font-mono">${(m.unitPrice * m.quantity).toFixed(2)}</TableCell>
-                  )}
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        )}
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function WorkJobCard() {
   const { id } = useParams<{ id: string }>();
@@ -116,7 +75,7 @@ export default function WorkJobCard() {
     overview: <WorkOverviewTab job={job} />,
     scope: <ScopeTab job={job} />,
     time: <TimeTab timeEntries={job.timeEntries} />,
-    materials: <WorkMaterialsTab materials={job.materials} showPricing={isSoleTrader} />,
+    materials: <MaterialsTab jobId={job.id} />,
     notes: <NotesTab notes={job.notes} />,
     photos: <PhotosTab photos={job.photos} />,
     forms: <FormsTab completedChecklists={completedChecklists} />,
