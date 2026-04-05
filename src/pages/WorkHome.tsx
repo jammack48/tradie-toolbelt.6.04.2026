@@ -158,28 +158,34 @@ export default function WorkHome() {
         />
       </div>
 
-      {/* Floating New Job button */}
+      {/* Floating quick action button */}
       <Popover open={fabOpen} onOpenChange={setFabOpen}>
         <PopoverTrigger asChild>
           <button
-            className="fixed bottom-20 right-4 z-50 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors"
+            className="fixed bottom-20 right-4 z-50 w-16 h-16 rounded-full bg-primary text-primary-foreground shadow-[0_10px_30px_hsl(var(--primary)/0.45)] flex items-center justify-center hover:bg-primary/90 transition-all animate-pulse"
           >
-            <Plus className="w-6 h-6" />
+            <Plus className="w-7 h-7" />
           </button>
         </PopoverTrigger>
-        <PopoverContent side="top" align="end" className="w-48 p-1.5">
+        <PopoverContent side="top" align="end" className="w-64 p-2">
           <button
             onClick={() => { setFabOpen(false); navigate("/new-job"); }}
-            className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-base font-semibold text-foreground hover:bg-accent transition-colors"
           >
-            <Wrench className="w-4 h-4 text-primary" /> Charge Up
+            <Plus className="w-5 h-5 text-primary" /> New Job
+          </button>
+          <button
+            onClick={() => { setFabOpen(false); navigate("/new-job"); }}
+            className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-base font-semibold text-foreground hover:bg-accent transition-colors"
+          >
+            <Wrench className="w-5 h-5 text-primary" /> Charge Up
           </button>
           {showQuoteOption && (
             <button
               onClick={() => { setFabOpen(false); navigate("/quote/new"); }}
-              className="w-full flex items-center gap-2.5 px-3 py-2.5 rounded-md text-sm font-medium text-foreground hover:bg-accent transition-colors"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-base font-semibold text-foreground hover:bg-accent transition-colors"
             >
-              <FileText className="w-4 h-4 text-primary" /> New Quote
+              <FileText className="w-5 h-5 text-primary" /> New Quote
             </button>
           )}
         </PopoverContent>

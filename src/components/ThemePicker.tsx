@@ -38,7 +38,7 @@ function RiserIcon({ className }: { className?: string }) {
 }
 
 export function ThemePicker() {
-  const { theme, setTheme, isDark, setIsDark } = useTheme();
+  const { theme, setTheme, isDark, setIsDark, sectionContrast, setSectionContrast } = useTheme();
   const { saveSettings } = useUserSettings();
   const { user } = useAuth();
 
@@ -113,6 +113,21 @@ export function ThemePicker() {
               setIsDark(value);
               void handlePersist(() => saveSettings({ isDark: value }));
             }}
+          />
+        </div>
+        <div className="mt-3 space-y-1.5">
+          <div className="flex items-center justify-between text-xs text-muted-foreground font-medium">
+            <span>Section Contrast</span>
+            <span>{sectionContrast}%</span>
+          </div>
+          <input
+            type="range"
+            min={25}
+            max={90}
+            step={5}
+            value={sectionContrast}
+            onChange={(e) => setSectionContrast(Number(e.target.value))}
+            className="w-full accent-primary"
           />
         </div>
       </PopoverContent>
