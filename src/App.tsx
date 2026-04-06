@@ -2,7 +2,7 @@ import { Toaster } from "@/components/ui/toaster";
 
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, Routes, Route, useLocation, useNavigate } from "react-router-dom";
 import { ScrollToTop } from "@/components/ScrollToTop";
 import { ThresholdProvider } from "@/contexts/ThresholdContext";
 import { NotificationStyleProvider } from "@/contexts/NotificationStyleContext";
@@ -45,27 +45,67 @@ import SmsTemplatesPage from "./pages/SmsTemplatesPage";
 import InvoicePage from "./pages/InvoicePage";
 
 import NotFound from "./pages/NotFound";
-import SplashPage from "./pages/SplashPage";
 import { cn } from "@/lib/utils";
+import LoginPage from "./pages/LoginPage";
+import { resolveLandingPath } from "@/lib/navigation/resolveLanding";
+import EntryPage from "./pages/EntryPage";
 
 const queryClient = new QueryClient();
 
 function AppLayout() {
   const { mode, trade, isWorkMode, isTimesheetOnlyMode, isIntroMode } = useAppMode();
   const { position } = useToolbarPosition();
+  const navigate = useNavigate();
+  const location = useLocation();
 
-  // Auto-skip splash if the user already has mode+trade saved (returning user / logged in)
-  const [splashDismissed, setSplashDismissed] = useState(() => !!(mode && trade));
+  type EntryStep = "entry" | "login" | "trade" | "mode" | "ready";
+  const [entryStep, setEntryStep] = useState<EntryStep>(() => (mode && trade ? "ready" : "entry"));
 
-  if (!splashDismissed) {
-    return <SplashPage onStart={() => setSplashDismissed(true)} />;
+  useEffect(() => {
+    if (entryStep === "trade" && trade) {
+      setEntryStep(mode ? "ready" : "mode");
+      return;
+    }
+    if (entryStep === "mode" && mode) {
+      setEntryStep(trade ? "ready" : "trade");
+      return;
+    }
+    if (entryStep === "ready" && (!trade || !mode)) {
+      setEntryStep(!trade ? "trade" : "mode");
+    }
+  }, [entryStep, trade, mode]);
+
+  useEffect(() => {
+    if (!mode || entryStep !== "ready") return;
+    const target = resolveLandingPath(mode);
+    if (location.pathname !== target) {
+      navigate(target, { replace: true });
+    }
+  }, [mode, entryStep, navigate, location.pathname]);
+
+  if (entryStep === "entry") {
+    return (
+      <EntryPage
+        onLogin={() => setEntryStep("login")}
+        onDemo={() => setEntryStep(trade ? (mode ? "ready" : "mode") : "trade")}
+      />
+    );
   }
 
-  if (!trade) {
+  if (entryStep === "login") {
+    return (
+      <LoginPage
+        onSuccess={() => setEntryStep(trade ? (mode ? "ready" : "mode") : "trade")}
+        onBack={() => setEntryStep("entry")}
+      />
+    );
+  }
+
+  if (!trade || entryStep === "trade") {
     return <TradePicker />;
   }
 
-  if (!mode) {
+  if (!mode || entryStep === "mode") {
     return <ModePicker />;
   }
 
