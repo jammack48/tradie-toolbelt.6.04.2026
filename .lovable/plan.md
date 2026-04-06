@@ -1,41 +1,42 @@
 
 
-## Plan: Migrate to Company-Based Multi-User Architecture
+## Plan: Fix Login Flow, FAB Menu, and Quote Funnel
 
-All tables have been renamed and RLS now uses `company_id` instead of `user_id`. The app currently references old table names and filters by `user_id`, so production data appears empty.
+### Issues Identified
+
+1. **Redundant ModePicker on login** — After login, `mode` is `null` (sessionStorage is empty), so `AppLayout` renders the `ModePicker` every time. For authenticated users, the mode should auto-set based on their saved user settings or persist across sessions (currently uses `sessionStorage` which clears on tab close).
+
+2. **FAB menu has 3 items, should be 2** — "New Job" and "Charge Up" both navigate to `/new-job`. Remove "New Job", keep only "Charge Up" and "New Quote". Make buttons larger for mobile.
+
+3. **"New Quote" shows "Quote not found"** — The `/quote/new` route works, but `QuotePage` with `id === "new"` renders the funnel. The issue is likely that `useDemoData().customers` returns empty in prod mode, so no customers load → user can't proceed → or the funnel completes but the resulting job object returns `null` from `getJobDetail`. Need to verify the funnel actually renders.
+
+4. **Address doesn't auto-fill when picking a customer** — The `QuoteFunnel` already sets `address` from `c.address` in `handleSelectCustomer`. The issue is that `customers` from `useDemoData()` may have empty `address` fields in prod mode, or the customer data isn't loading at all.
 
 ### Changes
 
-**1. `src/lib/modeTable.ts`** — Flip naming convention
-- `{base}_demo` → `demo_{base}`
-- `{base}_prod` → `prod_{base}`
+**1. `src/contexts/AppModeContext.tsx`** — Persist mode to `localStorage` instead of `sessionStorage`
+- Change `STORAGE_KEY` to use `localStorage` so mode survives tab close
+- On login, if a mode is already saved, skip the ModePicker automatically
+- Authenticated users go straight to their last-used mode
 
-**2. `src/services/supplierService.ts`** — Rename tables, clean interface
-- `"suppliers"` → `"prod_suppliers"` (6 occurrences)
-- `"supplier_items"` → `"prod_supplier_items"` (2 occurrences)
-- Remove `user_id` from `Supplier` interface (keep field in DB for audit, just remove from TypeScript type since it's no longer used for filtering)
+**2. `src/App.tsx`** — Auto-set mode for authenticated users
+- When `user` exists and `mode` is null, check if user settings indicate a default mode
+- If settings loaded and mode still null, auto-set to `"manage"` (the default for account holders)
+- Skip ModePicker entirely for logged-in users who had a previous mode
 
-**3. `src/services/supplierImportService.ts`** — Rename tables
-- `"supplier_items"` → `"prod_supplier_items"` (2 occurrences)
-- `"suppliers"` → `"prod_suppliers"` (1 occurrence)
+**3. `src/pages/WorkHome.tsx`** — Clean up FAB menu
+- Remove "New Job" button (redundant with "Charge Up")
+- Keep only "Charge Up" and "New Quote" (when permitted)
+- Make buttons larger: increase padding, font size, and touch targets for mobile
 
-**4. `src/services/jobMaterialsService.ts`** — Rename tables
-- `"job_materials"` → `"prod_job_materials"` (4 occurrences)
-- Join references `supplier_items` → `prod_supplier_items` and `suppliers` → `prod_suppliers` in the `.select()` join syntax
+**4. `src/components/quote/QuoteFunnel.tsx`** — Ensure address loads from customer
+- The code already sets address from customer data in `handleSelectCustomer`
+- Verify the customer objects from `useDemoData()` have address data populated
+- No code change needed here if the data is correct — the real fix is ensuring prod customers load with addresses
 
-**5. `src/contexts/UserSettingsContext.tsx`** — Rename table, fix upsert
-- `"user_settings"` → `"prod_user_settings"` (2 occurrences)
-- **Remove** `.eq("user_id", user.id)` from the SELECT query (RLS handles it)
-- **Keep** `user_id: user.id` in the upsert payload (it's part of the composite unique key `company_id + user_id`)
-- **Do NOT** pass `company_id` (DB default handles it)
+### Technical Details
 
-### Files NOT changed (auto-fixed by step 1)
-These all use `getTable()`, so the prefix flip fixes them automatically:
-- `src/services/dbDemoService.ts`
-- `src/services/customerImportService.ts`
-- `src/services/variationsService.ts`
-- `src/services/servicingService.ts`
-
-### No backend changes needed
-The FastAPI backend passes the auth token — RLS handles everything server-side too.
+- Mode persistence moves from `sessionStorage` → `localStorage` with key `tradie-app-mode`
+- For authenticated (non-demo) users, if no stored mode exists, default to `"manage"`
+- FAB popover width increases from `w-64` to `w-72`, button padding from `py-3` to `py-4`, text from `text-base` to `text-lg`
 
