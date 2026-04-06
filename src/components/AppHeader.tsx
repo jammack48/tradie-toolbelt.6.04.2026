@@ -9,6 +9,7 @@ import { useTutorial } from "@/contexts/TutorialContext";
 import { useAppMode } from "@/contexts/AppModeContext";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToolbarPosition } from "@/contexts/ToolbarPositionContext";
+import { resolveLandingPath } from "@/lib/navigation/resolveLanding";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
@@ -63,19 +64,19 @@ export function AppHeader() {
             </div>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={() => { setMode("manage"); navigate("/"); }}>
+            <DropdownMenuItem onClick={() => { setMode("manage"); navigate(resolveLandingPath("manage")); }}>
               Manager
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setMode("sole-trader"); navigate("/"); }}>
+            <DropdownMenuItem onClick={() => { setMode("sole-trader"); navigate(resolveLandingPath("sole-trader")); }}>
               On the Tools
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setTutorialOn(true); setMode("work"); navigate("/"); }}>
+            <DropdownMenuItem onClick={() => { setTutorialOn(true); setMode("work"); navigate(resolveLandingPath("work")); }}>
               Employee
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setTutorialOn(false); setMode("timesheet"); navigate("/"); }}>
+            <DropdownMenuItem onClick={() => { setTutorialOn(false); setMode("timesheet"); navigate(resolveLandingPath("timesheet")); }}>
               Timesheet Only
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { setTutorialOn(true); setMode("intro"); navigate("/"); }}>
+            <DropdownMenuItem onClick={() => { setTutorialOn(true); setMode("intro"); navigate(resolveLandingPath("intro")); }}>
               Introduction Mode
             </DropdownMenuItem>
             <DropdownMenuItem onClick={() => { clearTrade(); clearMode(); navigate("/"); }}>
