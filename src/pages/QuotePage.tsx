@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { Component, type ErrorInfo, type ReactNode, useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Clock3, CircleCheck } from "lucide-react";
 import { useParams, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { getJobDetail, getNewJobDetail, getJobDetailFromDemoJob } from "@/data/dummyJobDetails";
@@ -25,6 +25,7 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
+import { Button } from "@/components/ui/button";
 
 type QuotePageTab = "overview" | "messages" | "line-items" | "variations" | "sequences" | "notes" | "history";
 
@@ -44,6 +45,31 @@ const statusColor: Record<QuoteStatus, string> = {
 
 type AgeTone = "green" | "orange" | "red";
 
+class FunnelErrorBoundary extends Component<
+  { onError: (error: Error) => void; children: ReactNode },
+  { hasError: boolean }
+> {
+  constructor(props: { onError: (error: Error) => void; children: ReactNode }) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, _errorInfo: ErrorInfo) {
+    this.props.onError(error);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return null;
+    }
+    return this.props.children;
+  }
+}
+
 export default function QuotePage() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -61,12 +87,28 @@ export default function QuotePage() {
   const [pendingNavId, setPendingNavId] = useState<string | null>(null);
   const [selectedSequenceId, setSelectedSequenceId] = useState<string | null>(null);
   const [variationCount, setVariationCount] = useState(0);
+  const [variationError, setVariationError] = useState<string | null>(null);
+  const [funnelError, setFunnelError] = useState<string | null>(null);
+  const [pageError, setPageError] = useState<string | null>(null);
   const { jobs, updateJobStage } = useDemoData();
   const { getThresholds, getLabel } = useThresholds();
 
   const isNew = id === "new";
   const liveJob = useMemo(() => jobs.find((item) => item.id === id), [jobs, id]);
-  const stageThresholds = getThresholds(liveJob?.stage || "To Quote");
+  const stageThresholdsResult = useMemo(() => {
+    try {
+      return {
+        value: getThresholds(liveJob?.stage || "To Quote"),
+        error: null as string | null,
+      };
+    } catch {
+      return {
+        value: { greenMax: Number.MAX_SAFE_INTEGER, orangeMax: Number.MAX_SAFE_INTEGER },
+        error: "Could not load quote stage thresholds.",
+      };
+    }
+  }, [getThresholds, liveJob?.stage]);
+  const stageThresholds = stageThresholdsResult.value;
   const ageTone: AgeTone = liveJob
     ? liveJob.urgent || liveJob.ageDays > stageThresholds.orangeMax
       ? "red"
@@ -80,6 +122,24 @@ export default function QuotePage() {
     red: { icon: AlertTriangle, className: "bg-[hsl(var(--status-red))]/20 text-[hsl(var(--status-red))]", label: getLabel(liveJob?.stage || "To Quote", "red") },
   } as const;
   const AgeIcon = ageMeta[ageTone].icon;
+
+  useEffect(() => {
+    if (!id) {
+      setPageError("Missing quote id.");
+      toast({
+        title: "Quote unavailable",
+        description: "Missing quote id. Please return and open the quote again.",
+      });
+    } else if (pageError === "Missing quote id.") {
+      setPageError(null);
+    }
+  }, [id, pageError]);
+
+  useEffect(() => {
+    if (stageThresholdsResult.error) {
+      setPageError(stageThresholdsResult.error);
+    }
+  }, [stageThresholdsResult.error]);
 
   const handleTabChange = (tabId: string) => {
     if (tabId === "back") {
@@ -117,10 +177,49 @@ export default function QuotePage() {
   useEffect(() => {
     if (isNew || !id) {
       setVariationCount(0);
+      setVariationError(null);
       return;
     }
-    fetchVariationCounts([id]).then((counts) => setVariationCount(counts[id] ?? 0)).catch(() => setVariationCount(0));
+    fetchVariationCounts([id])
+      .then((counts) => {
+        setVariationCount(counts[id] ?? 0);
+        setVariationError(null);
+      })
+      .catch(() => {
+        setVariationCount(0);
+        setVariationError("Variation counts are temporarily unavailable.");
+      });
   }, [id, isNew]);
+
+  useEffect(() => {
+    if (!variationError) return;
+    toast({
+      title: "Variations unavailable",
+      description: variationError,
+    });
+  }, [variationError]);
+
+  useEffect(() => {
+    if (!funnelError) return;
+    toast({
+      title: "Quote setup unavailable",
+      description: funnelError,
+    });
+  }, [funnelError]);
+
+  if (pageError) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center px-4">
+        <div className="max-w-md rounded-lg border bg-card p-4 text-center">
+          <h2 className="text-base font-semibold text-card-foreground">We couldn&apos;t load this quote</h2>
+          <p className="text-sm text-muted-foreground mt-1">{pageError}</p>
+          <Button className="mt-4" onClick={() => navigate("/")}>
+            Go to Home
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   if (isNew && !funnelComplete) {
     return (
@@ -136,15 +235,28 @@ export default function QuotePage() {
             </div>
           }
         >
-          <QuoteFunnel
-            onComplete={(data) => {
-              setFunnelData(data);
-              // Only pre-fill scope for custom descriptions, not bundle defaults
-              setFunnelComplete(true);
-            }}
-            onStepChange={setFunnelStep}
-            initialCustomer={initialCustomer}
-          />
+          {funnelError ? (
+            <div className="rounded-lg border bg-card p-4">
+              <h3 className="text-sm font-semibold text-card-foreground">Quote setup is unavailable</h3>
+              <p className="text-sm text-muted-foreground mt-1">{funnelError}</p>
+            </div>
+          ) : (
+            <FunnelErrorBoundary
+              onError={() => {
+                setFunnelError("Something went wrong while rendering the quote setup. Please try again.");
+              }}
+            >
+              <QuoteFunnel
+                onComplete={(data) => {
+                  setFunnelData(data);
+                  // Only pre-fill scope for custom descriptions, not bundle defaults
+                  setFunnelComplete(true);
+                }}
+                onStepChange={setFunnelStep}
+                initialCustomer={initialCustomer}
+              />
+            </FunnelErrorBoundary>
+          )}
 
           <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
             <AlertDialogContent>
