@@ -53,10 +53,9 @@ const queryClient = new QueryClient();
 function AppLayout() {
   const { mode, trade, isWorkMode, isTimesheetOnlyMode, isIntroMode } = useAppMode();
   const { position } = useToolbarPosition();
-  const [splashDismissed, setSplashDismissed] = useState(false);
 
-  // If mode and trade are already saved in localStorage, skip pickers.
-  // Only show splash → trade → mode on very first visit (when nothing is stored).
+  // Auto-skip splash if the user already has mode+trade saved (returning user / logged in)
+  const [splashDismissed, setSplashDismissed] = useState(() => !!(mode && trade));
 
   if (!splashDismissed) {
     return <SplashPage onStart={() => setSplashDismissed(true)} />;
