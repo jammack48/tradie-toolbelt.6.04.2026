@@ -27,6 +27,14 @@ function FABMenu() {
           <Plus className="w-6 h-6" />
         </button>
       </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-84 max-w-[calc(100vw-1rem)] p-3.5">
+        <div className="space-y-2.5">
+          <Button
+            variant="ghost"
+            className="h-auto min-h-16 w-full justify-start gap-4 px-4 py-5 text-[17px] font-medium"
+            onClick={() => { setOpen(false); navigate("/new-job"); }}
+          >
+            <Zap className="h-6 w-6 text-primary" />
       <PopoverContent side="top" align="end" className="w-80 p-3">
         <div className="space-y-2">
           <Button
@@ -39,6 +47,11 @@ function FABMenu() {
           </Button>
           <Button
             variant="ghost"
+            className="h-auto min-h-16 w-full justify-start gap-4 px-4 py-5 text-[17px] font-medium"
+            onClick={() => { setOpen(false); navigate("/quote/new"); }}
+          >
+            <FileText className="h-6 w-6 text-primary" />
+
             className="h-auto min-h-14 w-full justify-start gap-3.5 px-3 py-4 text-[1.03rem] font-medium"
             onClick={() => { setOpen(false); navigate("/quote/new"); }}
           >
