@@ -51,7 +51,7 @@ import { cn } from "@/lib/utils";
 const queryClient = new QueryClient();
 
 function AppLayout() {
-  const { mode, trade, isWorkMode, isTimesheetOnlyMode, isIntroMode, clearMode, clearTrade } = useAppMode();
+  const { mode, trade, isWorkMode, isTimesheetOnlyMode, isIntroMode } = useAppMode();
   const { position } = useToolbarPosition();
   const [splashDismissed, setSplashDismissed] = useState(false);
 
