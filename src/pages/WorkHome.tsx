@@ -27,22 +27,22 @@ function FABMenu() {
           <Plus className="w-6 h-6" />
         </button>
       </PopoverTrigger>
-      <PopoverContent side="top" align="end" className="w-72 p-2">
-        <div className="space-y-1">
+      <PopoverContent side="top" align="end" className="w-84 max-w-[calc(100vw-1rem)] p-3.5">
+        <div className="space-y-2.5">
           <Button
             variant="ghost"
-            className="w-full justify-start gap-3 py-5 text-base h-auto"
+            className="h-auto min-h-16 w-full justify-start gap-4 px-4 py-5 text-[17px] font-medium"
             onClick={() => { setOpen(false); navigate("/new-job"); }}
           >
-            <Zap className="w-5 h-5 text-primary" />
-            Charge Up
+            <Zap className="h-6 w-6 text-primary" />
+            New Job / Charge Up
           </Button>
           <Button
             variant="ghost"
-            className="w-full justify-start gap-3 py-5 text-base h-auto"
+            className="h-auto min-h-16 w-full justify-start gap-4 px-4 py-5 text-[17px] font-medium"
             onClick={() => { setOpen(false); navigate("/quote/new"); }}
           >
-            <FileText className="w-5 h-5 text-primary" />
+            <FileText className="h-6 w-6 text-primary" />
             New Quote
           </Button>
         </div>
