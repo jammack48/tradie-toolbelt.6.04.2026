@@ -55,15 +55,8 @@ function AppLayout() {
   const { position } = useToolbarPosition();
   const [splashDismissed, setSplashDismissed] = useState(false);
 
-  // Each fresh browser session starts at splash → trade picker → mode picker
-  useEffect(() => {
-    const started = sessionStorage.getItem("appSessionStarted");
-    if (!started) {
-      sessionStorage.setItem("appSessionStarted", "true");
-      clearMode();
-      clearTrade();
-    }
-  }, [clearMode, clearTrade]);
+  // If mode and trade are already saved in localStorage, skip pickers.
+  // Only show splash → trade → mode on very first visit (when nothing is stored).
 
   if (!splashDismissed) {
     return <SplashPage onStart={() => setSplashDismissed(true)} />;

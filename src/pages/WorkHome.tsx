@@ -7,7 +7,7 @@ import { DayStrip } from "@/components/schedule/DayStrip";
 import { DayViewToggle } from "@/components/schedule/DayViewToggle";
 import { TimeGrid3Day } from "@/components/schedule/TimeGrid3Day";
 import { generateWeekJobs } from "@/components/schedule/scheduleData";
-import { Package, ChevronUp, ChevronDown, Plus } from "lucide-react";
+import { Package, ChevronUp, ChevronDown, Plus, Zap, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Card, CardContent } from "@/components/ui/card";
