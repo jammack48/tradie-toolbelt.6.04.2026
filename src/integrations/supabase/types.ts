@@ -14,7 +14,7 @@ export type Database = {
   }
   public: {
     Tables: {
-      customers: {
+      customers_demo: {
         Row: {
           address: string
           contacts: Json
