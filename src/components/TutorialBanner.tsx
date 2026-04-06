@@ -29,7 +29,7 @@ export function TutorialBanner({ overrideKey, tabKey }: { overrideKey?: string; 
   if (dismissed.has(key)) return null;
 
   return (
-    <div className="mx-3 sm:mx-6 mt-2 sm:mt-3 mb-1 rounded-lg border border-blue-400 bg-blue-500 px-3 sm:px-4 py-2 sm:py-3 flex items-start gap-2 sm:gap-3 animate-in fade-in slide-in-from-top-2 duration-300">
+    <div className="fixed left-3 right-3 sm:left-6 sm:right-6 top-[96px] sm:top-[72px] z-[70] rounded-lg border border-blue-400 bg-blue-500 px-3 sm:px-4 py-2 sm:py-3 flex items-start gap-2 sm:gap-3 animate-in fade-in slide-in-from-top-2 duration-300 shadow-lg">
       <GraduationCap className="w-4 h-4 sm:w-5 sm:h-5 text-white shrink-0 mt-0.5" />
       <div className="flex-1 min-w-0">
         <p className="text-xs sm:text-sm font-semibold text-white">{entry.title}</p>

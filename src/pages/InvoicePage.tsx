@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { getJobDetail, getNewJobDetail } from "@/data/dummyJobDetails";
+import { getJobDetail, getNewJobDetail, getJobDetailFromDemoJob } from "@/data/dummyJobDetails";
 import { toast } from "@/hooks/use-toast";
 import { PageToolbar } from "@/components/PageToolbar";
 import { QuoteOverviewTab } from "@/components/quote/QuoteOverviewTab";
@@ -138,6 +138,7 @@ export default function InvoicePage() {
       }
     : (() => {
         const detail = getJobDetail(id || "");
+        if (!detail && liveJob) return getJobDetailFromDemoJob(liveJob);
         if (!detail) return null;
         if (!liveJob) return detail;
         return {

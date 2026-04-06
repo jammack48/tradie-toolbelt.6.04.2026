@@ -12,6 +12,7 @@ import { useJobPrefix } from "@/contexts/JobPrefixContext";
 import { formatJobNumber } from "@/lib/jobNumber";
 import { startOfWeek } from "date-fns";
 import { toast } from "@/hooks/use-toast";
+import { useAppMode } from "@/contexts/AppModeContext";
 
 const OPTIONAL_FORMS = ["Site induction", "Take 5", "Compliance checklist"];
 
@@ -19,6 +20,7 @@ export default function TimesheetOnlyJobCard() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { prefix } = useJobPrefix();
+  const { trade } = useAppMode();
 
   const job = useMemo(() => {
     if (!id) return undefined;
@@ -27,8 +29,8 @@ export default function TimesheetOnlyJobCard() {
     if (fromDemo) return fromDemo;
 
     const currentWeekStart = startOfWeek(new Date(), { weekStartsOn: 1 });
-    return generateWeekJobs(currentWeekStart).find((item) => item.id === id);
-  }, [id]);
+    return generateWeekJobs(currentWeekStart, trade).find((item) => item.id === id);
+  }, [id, trade]);
 
   const [timerRunning, setTimerRunning] = useState(false);
   const [breakOn, setBreakOn] = useState(false);

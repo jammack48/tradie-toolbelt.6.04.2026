@@ -1,42 +1,106 @@
 
+## Goal
+Make the backend connection issue diagnosable in one place and remove the guesswork around which key Render should use.
 
-## Plan: Fix Login Flow, FAB Menu, and Quote Funnel
+## What’s happening now
+- The FastAPI backend reads:
+  - `SUPABASE_URL`
+  - `SUPABASE_SERVICE_KEY`
+- It then calls `create_client(url, key)` in `backend/main.py`.
+- The frontend only sees `connected / offline`, so there’s not enough detail to tell whether the failure is:
+  - missing env vars
+  - wrong URL
+  - wrong key type
+  - malformed key / whitespace
+  - SDK incompatibility
 
-### Issues Identified
+## Important answer: which key?
+For the current backend code, the safest key to use is:
 
-1. **Redundant ModePicker on login** — After login, `mode` is `null` (sessionStorage is empty), so `AppLayout` renders the `ModePicker` every time. For authenticated users, the mode should auto-set based on their saved user settings or persist across sessions (currently uses `sessionStorage` which clears on tab close).
+- **Supabase Dashboard → API Keys → “Legacy anon, service_role API keys” → `service_role`**
+- It should be the **long JWT-style key** starting with `eyJ...`
 
-2. **FAB menu has 3 items, should be 2** — "New Job" and "Charge Up" both navigate to `/new-job`. Remove "New Job", keep only "Charge Up" and "New Quote". Make buttons larger for mobile.
+Do **not** use:
+- the **publishable** key
+- the new `sb_secret_...` key for this current Python health-check path unless we explicitly refactor/test support for it
 
-3. **"New Quote" shows "Quote not found"** — The `/quote/new` route works, but `QuotePage` with `id === "new"` renders the funnel. The issue is likely that `useDemoData().customers` returns empty in prod mode, so no customers load → user can't proceed → or the funnel completes but the resulting job object returns `null` from `getJobDetail`. Need to verify the funnel actually renders.
+## Plan
 
-4. **Address doesn't auto-fill when picking a customer** — The `QuoteFunnel` already sets `address` from `c.address` in `handleSelectCustomer`. The issue is that `customers` from `useDemoData()` may have empty `address` fields in prod mode, or the customer data isn't loading at all.
+### 1. Add structured backend diagnostics
+Update `backend/main.py` so `/health` returns a safe debug object like:
+- whether `SUPABASE_URL` exists
+- whether `SUPABASE_SERVICE_KEY` exists
+- detected key type:
+  - `legacy_jwt`
+  - `new_secret`
+  - `unknown`
+- masked key preview only (example: `eyJ...abcd`, never full secret)
+- exact exception class/message when connection fails
+- whether the client was created successfully
+- whether the DB ping succeeded
 
-### Changes
+This will let the frontend show the real failure reason instead of just “DB offline”.
 
-**1. `src/contexts/AppModeContext.tsx`** — Persist mode to `localStorage` instead of `sessionStorage`
-- Change `STORAGE_KEY` to use `localStorage` so mode survives tab close
-- On login, if a mode is already saved, skip the ModePicker automatically
-- Authenticated users go straight to their last-used mode
+### 2. Make the health check more explicit
+Refine the check so the backend distinguishes:
+- `not_configured`
+- `invalid_key`
+- `client_init_failed`
+- `connected`
+- `offline`
+- `query_failed`
 
-**2. `src/App.tsx`** — Auto-set mode for authenticated users
-- When `user` exists and `mode` is null, check if user settings indicate a default mode
-- If settings loaded and mode still null, auto-set to `"manage"` (the default for account holders)
-- Skip ModePicker entirely for logged-in users who had a previous mode
+That way you’ll know if the problem is the key itself vs a later query failure.
 
-**3. `src/pages/WorkHome.tsx`** — Clean up FAB menu
-- Remove "New Job" button (redundant with "Charge Up")
-- Keep only "Charge Up" and "New Quote" (when permitted)
-- Make buttons larger: increase padding, font size, and touch targets for mobile
+### 3. Surface the detailed diagnostics in the UI
+Update the backend status/log UI so it shows:
+- server status
+- DB status
+- detected key type
+- last error message
+- env var presence summary
 
-**4. `src/components/quote/QuoteFunnel.tsx`** — Ensure address loads from customer
-- The code already sets address from customer data in `handleSelectCustomer`
-- Verify the customer objects from `useDemoData()` have address data populated
-- No code change needed here if the data is correct — the real fix is ensuring prod customers load with addresses
+Example log lines:
+- `SUPABASE_URL found`
+- `SUPABASE_SERVICE_KEY found (type: new_secret)`
+- `Supabase client init failed: Invalid API key`
+- `Expected key type: legacy service_role JWT`
 
-### Technical Details
+### 4. Add a dedicated debug section in the panel
+Extend `BackendLogPanel` with a compact “Connection Debug” block showing:
+- URL configured: yes/no
+- key configured: yes/no
+- key type: legacy_jwt / new_secret / unknown
+- last backend error
+- last successful ping time
 
-- Mode persistence moves from `sessionStorage` → `localStorage` with key `tradie-app-mode`
-- For authenticated (non-demo) users, if no stored mode exists, default to `"manage"`
-- FAB popover width increases from `w-64` to `w-72`, button padding from `py-3` to `py-4`, text from `text-base` to `text-lg`
+This gives you a single on-screen source of truth.
 
+### 5. Document the exact Render setup in README
+Add a short “Standalone DB connection” note to `README.md`:
+- `SUPABASE_URL = https://sbthgkcmbxjgaqvntjja.supabase.co`
+- `SUPABASE_SERVICE_KEY = legacy service_role JWT key from API Keys page`
+- note that the current backend health check does **not** use the publishable key
+- note that the new `sb_secret_...` key may not work with the current Python setup
+
+## Files to change
+- `backend/main.py`
+  - add safe env/key diagnostics
+  - return structured health response
+- `src/contexts/BackendContext.tsx`
+  - parse new debug fields from `/health`
+  - store last error / key type / env presence
+- `src/components/BackendLogPanel.tsx`
+  - display detailed diagnostics
+- `src/components/BackendStatus.tsx`
+  - optionally improve tooltip text with DB reason
+- `README.md`
+  - document the correct key source and current expectation
+
+## Expected result
+After this change, the app will no longer just say “DB offline”. It will tell you something like:
+- `Key type detected: new_secret`
+- `Client init failed: Invalid API key`
+- `Expected: legacy service_role JWT from API Keys > Legacy anon, service_role`
+
+That will make the fix immediate and remove the key confusion.

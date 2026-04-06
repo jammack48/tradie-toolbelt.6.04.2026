@@ -3,21 +3,21 @@ import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip
 import { useBackend } from "@/contexts/BackendContext";
 
 export function BackendStatus() {
-  const { connected, setPanelOpen } = useBackend();
+  const { connected, dbConnected, dbStatus, setPanelOpen } = useBackend();
 
+  const allGood = connected === true && dbConnected === true;
   const color =
     connected === null
       ? "text-muted-foreground"
-      : connected
+      : allGood
         ? "text-[hsl(var(--status-green))]"
-        : "text-destructive";
+        : connected
+          ? "text-amber-500"
+          : "text-destructive";
 
-  const label =
-    connected === null
-      ? "Checking backend…"
-      : connected
-        ? "Backend connected"
-        : "Backend offline";
+  const serverLabel =
+    connected === null ? "Checking…" : connected ? "Server ✓" : "Server ✗";
+  const dbLabel = dbStatus ? ` • DB: ${dbStatus}` : "";
 
   return (
     <Tooltip>
@@ -29,7 +29,7 @@ export function BackendStatus() {
           <Database className={`w-4.5 h-4.5 ${color} transition-colors`} />
         </button>
       </TooltipTrigger>
-      <TooltipContent><p className="text-xs">{label}</p></TooltipContent>
+      <TooltipContent><p className="text-xs">{serverLabel}{dbLabel}</p></TooltipContent>
     </Tooltip>
   );
 }

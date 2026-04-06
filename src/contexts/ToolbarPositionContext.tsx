@@ -1,5 +1,4 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from "react";
-import { useUserSettings } from "@/contexts/UserSettingsContext";
 
 export type ToolbarPosition = "left" | "right" | "top" | "bottom";
 
@@ -22,14 +21,6 @@ const ToolbarPositionContext = createContext<ToolbarPositionContextValue | null>
 
 export function ToolbarPositionProvider({ children }: { children: ReactNode }) {
   const [position, setPosition] = useState<ToolbarPosition>(getStoredPosition);
-  const { settings, saveSettings, loading } = useUserSettings();
-
-  useEffect(() => {
-    if (loading) return;
-    if (settings.toolbarPosition !== position) {
-      setPosition(settings.toolbarPosition);
-    }
-  }, [loading, settings.toolbarPosition, position]);
 
   useEffect(() => {
     localStorage.setItem("toolbar-position", position);
@@ -40,13 +31,7 @@ export function ToolbarPositionProvider({ children }: { children: ReactNode }) {
     do {
       idx = (idx + 1) % POSITION_CYCLE.length;
     } while (skip?.includes(POSITION_CYCLE[idx]));
-    const next = POSITION_CYCLE[idx];
-    const previous = position;
-    setPosition(next);
-    void saveSettings({ toolbarPosition: next }).catch((error) => {
-      console.error("Failed to save toolbar position", error);
-      setPosition(previous);
-    });
+    setPosition(POSITION_CYCLE[idx]);
   };
 
   return (

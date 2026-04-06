@@ -18,7 +18,7 @@ export function TutorialTip({ tip, children, side = "top" }: TutorialTipProps) {
   return (
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side={side} className="max-w-[220px] text-center">
+      <TooltipContent side={side} className="max-w-[220px] text-center bg-blue-600 text-blue-50 border-blue-500 shadow-lg">
         <p className="text-xs leading-snug">{tip}</p>
       </TooltipContent>
     </Tooltip>

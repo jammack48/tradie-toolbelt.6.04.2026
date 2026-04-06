@@ -7,19 +7,17 @@ import { ScrollToTop } from "@/components/ScrollToTop";
 import { ThresholdProvider } from "@/contexts/ThresholdContext";
 import { NotificationStyleProvider } from "@/contexts/NotificationStyleContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
-import { ToolbarPositionProvider } from "@/contexts/ToolbarPositionContext";
+import { ToolbarPositionProvider, useToolbarPosition } from "@/contexts/ToolbarPositionContext";
 import { TutorialProvider } from "@/contexts/TutorialContext";
 import { AppModeProvider, useAppMode } from "@/contexts/AppModeContext";
 import { DemoDataProvider } from "@/contexts/DemoDataContext";
-import { AuthProvider, useAuth } from "@/contexts/AuthContext";
-import { UserSettingsProvider, useUserSettings } from "@/contexts/UserSettingsContext";
-import { useEffect, useState } from "react";
-import { useTheme } from "@/contexts/ThemeContext";
+import { useState, useEffect } from "react";
 import { JobPrefixProvider } from "@/contexts/JobPrefixContext";
 import { BackendProvider } from "@/contexts/BackendContext";
 import { BackendLogPanel } from "@/components/BackendLogPanel";
 import { AppHeader } from "@/components/AppHeader";
 import { ModePicker } from "@/components/ModePicker";
+import { TradePicker } from "@/components/TradePicker";
 import { WorkBottomNav } from "@/components/WorkBottomNav";
 import Hub from "./pages/Hub";
 import Index from "./pages/Index";
@@ -37,6 +35,7 @@ import QuotePage from "./pages/QuotePage";
 import ComingSoon from "./pages/ComingSoon";
 import WorkHub from "./pages/WorkHub";
 import WorkTimesheet from "./pages/WorkTimesheet";
+import IntroInvoices from "./pages/IntroInvoices";
 import WorkNotes from "./pages/WorkNotes";
 import WorkChat from "./pages/WorkChat";
 import BundlesPage from "./pages/BundlesPage";
@@ -46,45 +45,25 @@ import SmsTemplatesPage from "./pages/SmsTemplatesPage";
 import InvoicePage from "./pages/InvoicePage";
 
 import NotFound from "./pages/NotFound";
-import LoginPage from "./pages/LoginPage";
-import ResetPasswordPage from "./pages/ResetPasswordPage";
 import SplashPage from "./pages/SplashPage";
+import { cn } from "@/lib/utils";
 
 const queryClient = new QueryClient();
 
 function AppLayout() {
-  const { mode, isWorkMode, isTimesheetOnlyMode, isIntroMode } = useAppMode();
-  const { user, loading, isDemo, setIsDemo } = useAuth();
-  const [showLogin, setShowLogin] = useState(false);
-  const { settings, loading: settingsLoading } = useUserSettings();
-  const { setTheme, setIsDark } = useTheme();
+  const { mode, trade, isWorkMode, isTimesheetOnlyMode, isIntroMode } = useAppMode();
+  const { position } = useToolbarPosition();
+  const [splashDismissed, setSplashDismissed] = useState(false);
 
-  useEffect(() => {
-    if (settingsLoading) return;
-    setTheme(settings.theme);
-    setIsDark(settings.isDark);
-  }, [settingsLoading, settings.theme, settings.isDark, setTheme, setIsDark]);
+  // If mode and trade are already saved in localStorage, skip pickers.
+  // Only show splash → trade → mode on very first visit (when nothing is stored).
 
-  // Show loading spinner while auth initializes
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-spin w-8 h-8 border-4 border-primary border-t-transparent rounded-full" />
-      </div>
-    );
+  if (!splashDismissed) {
+    return <SplashPage onStart={() => setSplashDismissed(true)} />;
   }
 
-  // Unauthenticated: show SplashPage or LoginPage
-  if (!user && !isDemo) {
-    if (showLogin) {
-      return <LoginPage onBack={() => setShowLogin(false)} />;
-    }
-    return (
-      <SplashPage
-        onSignIn={() => setShowLogin(true)}
-        onDemo={() => setIsDemo(true)}
-      />
-    );
+  if (!trade) {
+    return <TradePicker />;
   }
 
   if (!mode) {
@@ -94,7 +73,14 @@ function AppLayout() {
   return (
     <div className="min-h-screen bg-background">
       <AppHeader />
-      <div className={isWorkMode ? "pb-16" : ""}>
+      <div
+        className={cn(
+          isWorkMode && position === "bottom" && "pb-16",
+          isWorkMode && position === "top" && "pt-14",
+          isWorkMode && position === "left" && "pl-16",
+          isWorkMode && position === "right" && "pr-16"
+        )}
+      >
         <Routes>
           {isWorkMode ? (
             isTimesheetOnlyMode ? (
@@ -109,6 +95,7 @@ function AppLayout() {
             ) : isIntroMode ? (
               <>
                 <Route path="/" element={<IntroJobFlow />} />
+                <Route path="/intro-invoices" element={<IntroInvoices />} />
                 <Route path="*" element={<IntroJobFlow />} />
               </>
             ) : (
@@ -122,7 +109,6 @@ function AppLayout() {
                 <Route path="/work-hub" element={<WorkHub />} />
                 <Route path="/timesheet" element={<WorkTimesheet />} />
                 <Route path="/schedule" element={<SchedulePage />} />
-                <Route path="/quote/new" element={<QuotePage />} />
                 <Route path="/quote/:id" element={<QuotePage />} />
                 <Route path="*" element={<WorkHome />} />
               </>
@@ -157,8 +143,6 @@ function AppLayout() {
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <ThemeProvider>
-      <AuthProvider>
-      <UserSettingsProvider>
       <BackendProvider>
       <JobPrefixProvider>
       <AppModeProvider>
@@ -172,10 +156,7 @@ const App = () => (
           <BackendLogPanel />
           <BrowserRouter>
             <ScrollToTop />
-            <Routes>
-              <Route path="/reset-password" element={<ResetPasswordPage />} />
-              <Route path="*" element={<AppLayout />} />
-            </Routes>
+            <AppLayout />
           </BrowserRouter>
         </TooltipProvider>
       </NotificationStyleProvider>
@@ -186,8 +167,6 @@ const App = () => (
       </AppModeProvider>
       </JobPrefixProvider>
       </BackendProvider>
-      </UserSettingsProvider>
-      </AuthProvider>
     </ThemeProvider>
   </QueryClientProvider>
 );

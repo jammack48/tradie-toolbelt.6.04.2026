@@ -1,31 +1,62 @@
 import { useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
+import { useAppMode } from "@/contexts/AppModeContext";
 import { startOfWeek, addWeeks, subWeeks, addDays, format, isToday } from "date-fns";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { DayStrip } from "@/components/schedule/DayStrip";
 import { DayViewToggle } from "@/components/schedule/DayViewToggle";
 import { TimeGrid3Day } from "@/components/schedule/TimeGrid3Day";
 import { generateWeekJobs } from "@/components/schedule/scheduleData";
-import { Package, ChevronUp, ChevronDown, Plus, Wrench, FileText } from "lucide-react";
+import { Package, ChevronUp, ChevronDown, Plus, Zap, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Card, CardContent } from "@/components/ui/card";
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { getJobDetail } from "@/data/dummyJobDetails";
 import { cn } from "@/lib/utils";
 import { TutorialBanner } from "@/components/TutorialBanner";
-import { useAppMode } from "@/contexts/AppModeContext";
-import { useUserSettings } from "@/contexts/UserSettingsContext";
+
+function FABMenu() {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="fixed bottom-20 right-4 z-50 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors">
+          <Plus className="w-6 h-6" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-72 p-2">
+        <div className="space-y-1">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 py-5 text-base h-auto"
+            onClick={() => { setOpen(false); navigate("/new-job"); }}
+          >
+            <Zap className="w-5 h-5 text-primary" />
+            Charge Up
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 py-5 text-base h-auto"
+            onClick={() => { setOpen(false); navigate("/quote/new"); }}
+          >
+            <FileText className="w-5 h-5 text-primary" />
+            New Quote
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const CURRENT_STAFF = "Dave";
 
 export default function WorkHome() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
-  const { mode } = useAppMode();
-  const { settings } = useUserSettings();
-  const [fabOpen, setFabOpen] = useState(false);
-  const showQuoteOption = mode === "sole-trader" || mode === "manage" || settings.employeeCanQuote;
+  const { trade } = useAppMode();
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [viewDays, setViewDays] = useState<1 | 3 | 5>(3);
@@ -47,7 +78,7 @@ export default function WorkHome() {
   }, [selectedDate, viewDays]);
 
   // Filter to only current staff's jobs
-  const weekJobs = useMemo(() => generateWeekJobs(weekStart), [weekStart]);
+  const weekJobs = useMemo(() => generateWeekJobs(weekStart, trade), [weekStart, trade]);
   const myJobs = useMemo(
     () => weekJobs.filter((j) => j.assignedTo === CURRENT_STAFF),
     [weekJobs]
@@ -158,38 +189,8 @@ export default function WorkHome() {
         />
       </div>
 
-      {/* Floating quick action button */}
-      <Popover open={fabOpen} onOpenChange={setFabOpen}>
-        <PopoverTrigger asChild>
-          <button
-            className="fixed bottom-20 right-4 z-50 w-16 h-16 rounded-full bg-primary text-primary-foreground shadow-[0_10px_30px_hsl(var(--primary)/0.45)] flex items-center justify-center hover:bg-primary/90 transition-all animate-pulse"
-          >
-            <Plus className="w-7 h-7" />
-          </button>
-        </PopoverTrigger>
-        <PopoverContent side="top" align="end" className="w-64 p-2">
-          <button
-            onClick={() => { setFabOpen(false); navigate("/new-job"); }}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-base font-semibold text-foreground hover:bg-accent transition-colors"
-          >
-            <Plus className="w-5 h-5 text-primary" /> New Job
-          </button>
-          <button
-            onClick={() => { setFabOpen(false); navigate("/new-job"); }}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-base font-semibold text-foreground hover:bg-accent transition-colors"
-          >
-            <Wrench className="w-5 h-5 text-primary" /> Charge Up
-          </button>
-          {showQuoteOption && (
-            <button
-              onClick={() => { setFabOpen(false); navigate("/quote/new"); }}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-md text-base font-semibold text-foreground hover:bg-accent transition-colors"
-            >
-              <FileText className="w-5 h-5 text-primary" /> New Quote
-            </button>
-          )}
-        </PopoverContent>
-      </Popover>
+      {/* Floating action menu */}
+      <FABMenu />
     </div>
   );
 }

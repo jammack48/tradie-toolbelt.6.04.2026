@@ -13,6 +13,33 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
 import { useAppMode } from "@/contexts/AppModeContext";
+import { useToolbarPosition } from "@/contexts/ToolbarPositionContext";
+
+const INTRO_INVOICES_KEY = "introSentInvoices";
+
+export interface IntroInvoiceRecord {
+  id: string;
+  customerName: string;
+  phone: string;
+  email: string;
+  total: number;
+  sentAt: string;
+}
+
+export function loadIntroInvoices(): IntroInvoiceRecord[] {
+  try {
+    const raw = localStorage.getItem(INTRO_INVOICES_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveIntroInvoice(invoice: IntroInvoiceRecord) {
+  const invoices = loadIntroInvoices();
+  localStorage.setItem(INTRO_INVOICES_KEY, JSON.stringify([invoice, ...invoices]));
+}
 
 /* ─── Types ─── */
 interface LabourLine { id: string; hours: number; rate: number; }
@@ -20,7 +47,7 @@ interface AddOn { id: string; label: string; amount: number; enabled: boolean; i
 interface MaterialLine { id: string; name: string; costPrice: number; markup: number; qty: number; }
 
 const GST_RATE = 0.15;
-const fmtGST = (ex: number) => `$${ex.toFixed(0)} +GST ($${(ex * (1 + GST_RATE)).toFixed(0)})`;
+const fmtGST = (ex: number) => `$${ex.toFixed(0)} +GST ($${(ex * GST_RATE).toFixed(0)})`;
 
 const QUICK_PHRASES = [
   "Arrived on site", "Spoke with customer", "Diagnosed fault", "Completed repair",
@@ -35,7 +62,7 @@ const DEFAULT_ADDONS: AddOn[] = [
 
 /* ─── Guided tooltip data per step ─── */
 const STEP_TIPS: Record<number, { text: string; delay: number; duration: number }[]> = {
-  0: [{ text: "👤 Fill in the customer's details — just a name & phone is enough to get started!", delay: 300, duration: 5000 }],
+  0: [{ text: "Tap the little bars icon top-right to move your menu or change colours.", delay: 300, duration: 5000 }],
   1: [
     { text: "👆 Tap the blue chips to quickly add what you did", delay: 300, duration: 4000 },
     { text: "🎤 Or hit Dictate and speak — it types for you!", delay: 4500, duration: 4000 },
@@ -68,10 +95,10 @@ function GuidedTip({ tips, guidedMode }: { tips: typeof STEP_TIPS[0]; guidedMode
   if (!guidedMode || dismissed || visibleIdx < 0 || !tips[visibleIdx]) return null;
 
   return (
-    <div className="relative bg-primary/15 border border-primary/30 rounded-xl px-3 py-2 flex items-start gap-2 animate-in fade-in slide-in-from-top-2 duration-300">
-      <HelpCircle className="w-5 h-5 text-primary shrink-0 mt-0.5" />
-      <p className="text-sm font-medium text-primary flex-1">{tips[visibleIdx].text}</p>
-      <button onClick={() => setDismissed(true)} className="text-primary/60 hover:text-primary">
+    <div className="absolute left-0 right-0 top-2 z-20 bg-blue-600 border border-blue-500 rounded-xl px-3 py-2 flex items-start gap-2 animate-in fade-in slide-in-from-top-2 duration-300 shadow-md">
+      <HelpCircle className="w-5 h-5 text-blue-50 shrink-0 mt-0.5" />
+      <p className="text-sm font-medium text-blue-50 flex-1">{tips[visibleIdx].text}</p>
+      <button onClick={() => setDismissed(true)} className="text-blue-100/80 hover:text-blue-50">
         <X className="w-4 h-4" />
       </button>
     </div>
@@ -97,8 +124,16 @@ function StepDots({ current }: { current: number }) {
 
 /* ─── Main Component ─── */
 export default function IntroJobFlow() {
-  const navigate = useNavigate();
   const { clearMode } = useAppMode();
+  const { position } = useToolbarPosition();
+  const [formKey, setFormKey] = useState(0);
+
+  // Reset key forces full remount of inner form
+  return <IntroJobFlowInner key={formKey} onReset={() => setFormKey(k => k + 1)} clearMode={clearMode} position={position} />;
+}
+
+function IntroJobFlowInner({ onReset, clearMode, position }: { onReset: () => void; clearMode: () => void; position: string }) {
+  const navigate = useNavigate();
   const [step, setStep] = useState(0);
   const [guidedMode, setGuidedMode] = useState(() => {
     try { return localStorage.getItem("introGuided") !== "false"; } catch { return true; }
@@ -189,8 +224,16 @@ export default function IntroJobFlow() {
   const step1Valid = workDescription.trim().length > 0;
 
   const handleSendInvoice = () => {
+    saveIntroInvoice({
+      id: `inv-${Date.now()}`,
+      customerName,
+      phone,
+      email,
+      total,
+      sentAt: new Date().toISOString(),
+    });
     toast({ title: "Invoice Sent ✅", description: `$${total.toFixed(2)} invoice sent to ${customerName}.`, duration: 4000 });
-    navigate("/");
+    onReset();
   };
 
   const STEPS = [
@@ -204,7 +247,12 @@ export default function IntroJobFlow() {
   const StepIcon = STEPS[step]?.icon || FileText;
 
   return (
-    <div className="flex flex-col h-[calc(100dvh-48px)] overflow-hidden">
+    <div
+      className={cn(
+        "flex flex-col overflow-hidden",
+        position === "bottom" || position === "top" ? "h-[calc(100dvh-104px)]" : "h-[calc(100dvh-48px)]"
+      )}
+    >
       {/* Header bar */}
       <div className="px-3 py-2 border-b border-border bg-background flex items-center gap-3 shrink-0">
         <button
@@ -227,13 +275,13 @@ export default function IntroJobFlow() {
           )}
         >
           <HelpCircle className="w-3.5 h-3.5 inline mr-1" />
-          Guide {guidedMode ? "ON" : "OFF"}
+          Tutorial {guidedMode ? "ON" : "OFF"}
         </button>
         <StepDots current={step} />
       </div>
 
       {/* Scrollable content area */}
-      <div className="flex-1 overflow-y-auto px-3 sm:px-6 py-3 max-w-lg mx-auto w-full">
+      <div className={cn("relative flex-1 px-3 sm:px-6 py-3 max-w-lg mx-auto w-full", step === 4 ? "overflow-hidden" : "overflow-y-auto")}>
         {/* Guided tip */}
         {STEP_TIPS[step] && <GuidedTip tips={STEP_TIPS[step]} guidedMode={guidedMode} />}
 
@@ -243,7 +291,7 @@ export default function IntroJobFlow() {
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
                 <Label className="text-sm font-semibold">First Name *</Label>
-                <Input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John" className="h-12 text-base" autoFocus />
+                <Input value={firstName} onChange={e => setFirstName(e.target.value)} placeholder="John" className="h-12 text-base" />
               </div>
               <div className="space-y-1">
                 <Label className="text-sm font-semibold">Last Name</Label>
@@ -339,9 +387,9 @@ export default function IntroJobFlow() {
                     <Input type="number" min="0" value={line.rate} onChange={e => updateLabour(line.id, { rate: parseFloat(e.target.value) || 0 })} className="h-11 text-lg font-bold" />
                   </div>
                 </div>
-                <div className="text-right min-w-[70px]">
-                  <span className="text-base font-bold text-foreground">${(line.hours * line.rate).toFixed(0)}</span>
-                  <span className="block text-[10px] text-muted-foreground">+GST</span>
+                <div className="text-right min-w-[95px] self-end pb-1">
+                  <span className="block text-xl font-extrabold leading-none text-foreground">${(line.hours * line.rate).toFixed(0)}</span>
+                  <span className="block whitespace-pre-line text-[11px] leading-tight text-muted-foreground">{fmtGST(line.hours * line.rate)}</span>
                 </div>
                 {labourLines.length > 1 && (
                   <button onClick={() => removeLabourLine(line.id)} className="text-muted-foreground hover:text-destructive">
@@ -391,11 +439,24 @@ export default function IntroJobFlow() {
             </div>
 
             {/* Step running total */}
-            <div className="bg-muted/50 rounded-xl p-3 flex justify-between items-center">
-              <span className="text-sm font-semibold text-muted-foreground">This step total</span>
-              <div className="text-right">
-                <span className="text-lg font-bold text-foreground">${labourStepTotal.toFixed(0)}</span>
-                <span className="text-xs text-muted-foreground ml-1">+GST (${(labourStepTotal * GST_RATE).toFixed(0)})</span>
+            <div className="bg-muted/50 rounded-xl p-3 space-y-1">
+              <div className="flex justify-between items-center">
+                <span className="text-sm font-semibold text-muted-foreground">Labour</span>
+                <span className="text-2xl font-extrabold text-foreground">${labourTotal.toFixed(0)}</span>
+              </div>
+              <div className="flex justify-between items-center text-sm">
+                <span className="text-muted-foreground">GST</span>
+                <span>${(labourTotal * GST_RATE).toFixed(0)}</span>
+              </div>
+              {addOnsTotal > 0 && (
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Extras</span>
+                  <span>${addOnsTotal.toFixed(0)}</span>
+                </div>
+              )}
+              <div className="flex justify-between items-center border-t border-border pt-1">
+                <span className="text-sm font-semibold text-muted-foreground">This step total</span>
+                <span className="text-xl font-extrabold text-foreground">${labourStepTotal.toFixed(0)}</span>
               </div>
             </div>
           </div>
@@ -461,9 +522,9 @@ export default function IntroJobFlow() {
 
         {/* ===== STEP 4: INVOICE SUMMARY ===== */}
         {step === 4 && (
-          <div className="space-y-3 mt-2">
-            <div className="rounded-xl border-2 border-border bg-card p-3 space-y-1">
-              <div className="flex justify-between text-base">
+          <div className="space-y-2 mt-1 text-sm">
+            <div className="rounded-xl border border-border bg-card p-2.5 space-y-0.5">
+              <div className="flex justify-between text-sm">
                 <span className="text-muted-foreground">Customer</span>
                 <span className="font-bold text-foreground">{customerName}</span>
               </div>
@@ -473,44 +534,44 @@ export default function IntroJobFlow() {
             </div>
 
             {workDescription && (
-              <div className="rounded-xl border border-border bg-card p-3">
+              <div className="rounded-xl border border-border bg-card p-2">
                 <Label className="text-xs text-muted-foreground uppercase tracking-wider">Work Done</Label>
-                <p className="text-sm text-foreground mt-1 whitespace-pre-line line-clamp-4">{workDescription}</p>
+                <p className="text-xs text-foreground mt-1 whitespace-pre-line line-clamp-3">{workDescription}</p>
               </div>
             )}
 
-            <div className="rounded-xl border-2 border-border bg-card p-3 space-y-2">
+            <div className="rounded-xl border border-border bg-card p-2.5 space-y-1.5">
               <Label className="text-xs text-muted-foreground uppercase tracking-wider">Invoice Lines</Label>
               {labourLines.map(l => (
-                <div key={l.id} className="flex justify-between text-base">
-                  <span>Labour — {l.hours}h @ ${l.rate}/hr</span>
+                <div key={l.id} className="flex justify-between text-sm">
+                  <span className="truncate pr-2">Labour {l.hours}h @ ${l.rate}</span>
                   <span className="font-bold">${(l.hours * l.rate).toFixed(0)}</span>
                 </div>
               ))}
               {addOns.filter(a => a.enabled).map(a => (
-                <div key={a.id} className="flex justify-between text-base">
-                  <span>{a.label}</span>
+                <div key={a.id} className="flex justify-between text-sm">
+                  <span className="truncate pr-2">{a.label}</span>
                   <span className="font-bold">${a.amount.toFixed(0)}</span>
                 </div>
               ))}
               {materials.filter(m => m.name.trim()).map(m => (
-                <div key={m.id} className="flex justify-between text-base">
-                  <span>{m.name} × {m.qty}</span>
+                <div key={m.id} className="flex justify-between text-sm">
+                  <span className="truncate pr-2">{m.name} × {m.qty}</span>
                   <span className="font-bold">${(m.costPrice * m.qty * (1 + m.markup / 100)).toFixed(0)}</span>
                 </div>
               ))}
 
-              <div className="border-t border-border pt-2 space-y-1">
-                <div className="flex justify-between text-base">
+              <div className="border-t border-border pt-1.5 space-y-0.5">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">Subtotal (ex GST)</span>
                   <span className="font-bold">${subtotal.toFixed(2)}</span>
                 </div>
-                <div className="flex justify-between text-base">
+                <div className="flex justify-between text-sm">
                   <span className="text-muted-foreground">GST (15%)</span>
                   <span>${gst.toFixed(2)}</span>
                 </div>
                 <div className="flex justify-between text-xl font-bold pt-1 border-t border-border">
-                  <span>Total (inc GST)</span>
+                  <span>TOTAL</span>
                   <span className="text-primary">${total.toFixed(2)}</span>
                 </div>
               </div>

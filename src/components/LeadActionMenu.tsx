@@ -42,7 +42,7 @@ export function LeadActionMenu({ job, children, align = "start", side = "bottom"
         break;
       case "quote":
         updateJobStage(job.id, stageForPipelineEvent("quote_created"));
-        navigate("/quote/new");
+        navigate(`/quote/${job.id}`);
         break;
       case "schedule":
         navigate(`/schedule`);

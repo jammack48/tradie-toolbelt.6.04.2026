@@ -4,6 +4,32 @@
 
 **URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
 
+## Infrastructure & Accounts
+
+| Service | Purpose | Login / Account |
+|---------|---------|-----------------|
+| **Lovable** | Frontend hosting, IDE, deployment | macieinvestments |
+| **Lovable Cloud (Supabase)** | Demo database — session jobs, customers, pipeline data | Managed by Lovable (no separate login) |
+| **Supabase Standalone** | Production database (future) | jamie@thermalvolt.co.nz |
+| **Render** | Backend server (FastAPI) | jamie@ostelelectrical.co.nz |
+
+### Notes
+- Lovable Cloud project ID: `ttpndqaghjuoqnngdwlh`
+- Render backend URL: `https://tradie-toolbelt-server.onrender.com`
+- Standalone Supabase URL: `https://sbthgkcmbxjgaqvntjja.supabase.co`
+- Backend currently only serves a health-check endpoint — no business logic yet
+- Add new services to this table as they are introduced
+
+### Render Environment Variables
+The FastAPI backend on Render requires these env vars:
+
+| Variable | Value | Where to find |
+|----------|-------|---------------|
+| `SUPABASE_URL` | `https://sbthgkcmbxjgaqvntjja.supabase.co` | Supabase project URL |
+| `SUPABASE_SERVICE_KEY` | Legacy `service_role` JWT (starts with `eyJ...`) | Supabase Dashboard → Settings → API Keys → Legacy anon, service_role |
+
+**Important**: Do NOT use the publishable/anon key. Do NOT use new-format keys starting with `sb_secret_...` — the current Python SDK requires the legacy JWT.
+
 ## How can I edit this code?
 
 There are several ways of editing your application.

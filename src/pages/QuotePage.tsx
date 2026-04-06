@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, Clock3, CircleCheck, Check, X, CalendarIcon } from "lucide-react";
+import { AlertTriangle, Clock3, CircleCheck } from "lucide-react";
 import { useParams, useNavigate, useLocation, useSearchParams } from "react-router-dom";
-import { getJobDetail, getNewJobDetail } from "@/data/dummyJobDetails";
+import { getJobDetail, getNewJobDetail, getJobDetailFromDemoJob } from "@/data/dummyJobDetails";
 import { toast } from "@/hooks/use-toast";
 import { PageToolbar } from "@/components/PageToolbar";
 import { QuoteOverviewTab } from "@/components/quote/QuoteOverviewTab";
@@ -25,7 +25,6 @@ import {
   AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle,
   AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction,
 } from "@/components/ui/alert-dialog";
-
 
 type QuotePageTab = "overview" | "messages" | "line-items" | "variations" | "sequences" | "notes" | "history";
 
@@ -52,24 +51,9 @@ export default function QuotePage() {
   const managerState = (location.state as QuotePageLocationState | null) ?? null;
   const initialCustomer = managerState?.customer ?? null;
   const [searchParams] = useSearchParams();
-  const { jobs, updateJobStage } = useDemoData();
-  const { getThresholds, getLabel } = useThresholds();
-
-  const isNew = id === "new";
-  const liveJob = useMemo(() => jobs.find((item) => item.id === id), [jobs, id]);
-
-  // Derive initial status from the job's current pipeline stage
-  const derivedStatus: QuoteStatus = useMemo(() => {
-    if (!liveJob) return "Draft";
-    if (liveJob.stage === "Quote Sent") return "Sent";
-    if (liveJob.stage === "Quote Accepted") return "Approved";
-    return "Draft";
-  }, [liveJob]);
-
-  // Default tab: show overview for sent/approved quotes, line-items for drafts
-  const initialTab = (searchParams.get("tab") as QuotePageTab) || (derivedStatus !== "Draft" ? "overview" : "line-items");
+  const initialTab = (searchParams.get("tab") as QuotePageTab) || "line-items";
   const [activeTab, setActiveTab] = useState<QuotePageTab>(initialTab);
-  const [status, setStatus] = useState<QuoteStatus>(derivedStatus);
+  const [status, setStatus] = useState<QuoteStatus>("Draft");
   const [funnelComplete, setFunnelComplete] = useState(false);
   const [funnelData, setFunnelData] = useState<FunnelResult | null>(null);
   const [funnelStep, setFunnelStep] = useState(initialCustomer ? 2 : 1);
@@ -77,6 +61,11 @@ export default function QuotePage() {
   const [pendingNavId, setPendingNavId] = useState<string | null>(null);
   const [selectedSequenceId, setSelectedSequenceId] = useState<string | null>(null);
   const [variationCount, setVariationCount] = useState(0);
+  const { jobs, updateJobStage } = useDemoData();
+  const { getThresholds, getLabel } = useThresholds();
+
+  const isNew = id === "new";
+  const liveJob = useMemo(() => jobs.find((item) => item.id === id), [jobs, id]);
   const stageThresholds = getThresholds(liveJob?.stage || "To Quote");
   const ageTone: AgeTone = liveJob
     ? liveJob.urgent || liveJob.ageDays > stageThresholds.orangeMax
@@ -189,6 +178,7 @@ export default function QuotePage() {
       }
     : (() => {
         const detail = getJobDetail(id || "");
+        if (!detail && liveJob) return getJobDetailFromDemoJob(liveJob);
         if (!detail) return null;
         if (!liveJob) return detail;
         return {
@@ -231,45 +221,8 @@ export default function QuotePage() {
     }
   };
 
-  const handleAcceptQuote = () => {
-    if (job && !isNew) {
-      updateJobStage(job.id, "Quote Accepted");
-      setStatus("Approved");
-      toast({ title: "Quote accepted", description: `${job.jobName} moved to Quote Accepted.` });
-    }
-  };
-
-  const handleDeclineQuote = () => {
-    if (job && !isNew) {
-      toast({ title: "Quote declined", description: `${job.jobName} has been declined.` });
-      const returnState = managerState?.fromManager ? managerState : managerState?.fromStage ? { fromStage: managerState.fromStage } : undefined;
-      navigate("/", { state: returnState });
-    }
-  };
-
   const tabContent: Record<QuotePageTab, React.ReactNode> = {
-    overview: (
-      <div className="space-y-4">
-        {status === "Sent" && (
-          <div className="flex items-center gap-2 p-3 rounded-lg bg-accent/50 border border-border">
-            <span className="text-sm font-medium text-foreground flex-1">This quote has been sent — awaiting customer response.</span>
-            <button
-              onClick={handleAcceptQuote}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-semibold bg-[hsl(var(--status-green))] text-white hover:opacity-90 transition-opacity"
-            >
-              <Check className="w-4 h-4" /> Accept
-            </button>
-            <button
-              onClick={handleDeclineQuote}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-md text-sm font-semibold bg-[hsl(var(--status-red))] text-white hover:opacity-90 transition-opacity"
-            >
-              <X className="w-4 h-4" /> Decline
-            </button>
-          </div>
-        )}
-        <QuoteOverviewTab job={job} scope={job.description || ""} onScopeChange={() => {}} />
-      </div>
-    ),
+    overview: <QuoteOverviewTab job={job} scope={job.description || ""} onScopeChange={() => {}} />,
     messages: <MessagesTab recordType="quote" recordId={job.id} showPipelineLink pipelinePath="/" />,
     "line-items": (
       <div className="space-y-4">
@@ -311,14 +264,6 @@ export default function QuotePage() {
           <AgeIcon className="w-3 h-3" />
           {ageMeta[ageTone].label}
         </span>
-      )}
-      {status === "Approved" && (
-        <button
-          onClick={() => navigate(`/schedule?bookJob=${job.id}&jobName=${encodeURIComponent(job.jobName)}&client=${encodeURIComponent(job.client)}&address=${encodeURIComponent(job.address)}`)}
-          className="inline-flex items-center gap-1 text-xs font-bold px-3 py-1 rounded-full bg-[hsl(var(--status-green))] text-white hover:opacity-90 transition-opacity"
-        >
-          <CalendarIcon className="w-3 h-3" /> Schedule Job
-        </button>
       )}
     </div>
   );
