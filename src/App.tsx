@@ -77,6 +77,7 @@ function AppLayout() {
 
   useEffect(() => {
     if (!mode || entryStep !== "ready") return;
+    if (location.pathname !== "/") return;
     const target = resolveLandingPath(mode);
     if (location.pathname !== target) {
       navigate(target, { replace: true });

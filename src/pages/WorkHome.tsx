@@ -35,6 +35,14 @@ function FABMenu() {
             onClick={() => { setOpen(false); navigate("/new-job"); }}
           >
             <Zap className="h-6 w-6 text-primary" />
+      <PopoverContent side="top" align="end" className="w-80 p-3">
+        <div className="space-y-2">
+          <Button
+            variant="ghost"
+            className="h-auto min-h-14 w-full justify-start gap-3.5 px-3 py-4 text-[1.03rem] font-medium"
+            onClick={() => { setOpen(false); navigate("/new-job"); }}
+          >
+            <Zap className="h-5.5 w-5.5 text-primary" />
             New Job / Charge Up
           </Button>
           <Button
@@ -43,6 +51,11 @@ function FABMenu() {
             onClick={() => { setOpen(false); navigate("/quote/new"); }}
           >
             <FileText className="h-6 w-6 text-primary" />
+
+            className="h-auto min-h-14 w-full justify-start gap-3.5 px-3 py-4 text-[1.03rem] font-medium"
+            onClick={() => { setOpen(false); navigate("/quote/new"); }}
+          >
+            <FileText className="h-5.5 w-5.5 text-primary" />
             New Quote
           </Button>
         </div>
