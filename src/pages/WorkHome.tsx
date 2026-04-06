@@ -11,9 +11,45 @@ import { Package, ChevronUp, ChevronDown, Plus, Zap, FileText } from "lucide-rea
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Card, CardContent } from "@/components/ui/card";
+import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import { getJobDetail } from "@/data/dummyJobDetails";
 import { cn } from "@/lib/utils";
 import { TutorialBanner } from "@/components/TutorialBanner";
+
+function FABMenu() {
+  const navigate = useNavigate();
+  const [open, setOpen] = useState(false);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button className="fixed bottom-20 right-4 z-50 w-14 h-14 rounded-full bg-primary text-primary-foreground shadow-lg flex items-center justify-center hover:bg-primary/90 transition-colors">
+          <Plus className="w-6 h-6" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent side="top" align="end" className="w-72 p-2">
+        <div className="space-y-1">
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 py-5 text-base h-auto"
+            onClick={() => { setOpen(false); navigate("/new-job"); }}
+          >
+            <Zap className="w-5 h-5 text-primary" />
+            Charge Up
+          </Button>
+          <Button
+            variant="ghost"
+            className="w-full justify-start gap-3 py-5 text-base h-auto"
+            onClick={() => { setOpen(false); navigate("/quote/new"); }}
+          >
+            <FileText className="w-5 h-5 text-primary" />
+            New Quote
+          </Button>
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const CURRENT_STAFF = "Dave";
 
