@@ -7,12 +7,12 @@ type FrontendEnv = ImportMetaEnv & {
 
 const env = import.meta.env as FrontendEnv;
 
-const SUPABASE_URL = env.VITE_EXT_SUPABASE_URL?.trim() || env.VITE_SUPABASE_URL?.trim();
-const SUPABASE_ANON_KEY = env.VITE_EXT_SUPABASE_ANON_KEY?.trim() || env.VITE_SUPABASE_PUBLISHABLE_KEY?.trim();
+const SUPABASE_URL = env.VITE_EXT_SUPABASE_URL?.trim();
+const SUPABASE_ANON_KEY = env.VITE_EXT_SUPABASE_ANON_KEY?.trim();
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
-    "Missing Supabase environment variables. Set VITE_EXT_SUPABASE_URL and VITE_EXT_SUPABASE_ANON_KEY (or the default VITE_SUPABASE_* values)."
+    "Missing external Supabase environment variables. This app is configured to use VITE_EXT_SUPABASE_URL and VITE_EXT_SUPABASE_ANON_KEY only."
   );
 }
 
