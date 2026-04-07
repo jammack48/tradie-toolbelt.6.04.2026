@@ -39,11 +39,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setTheme = (t: Theme) => {
     setThemeState(t);
     localStorage.setItem("theme", t);
+    applyTheme(t, isDark);
   };
 
   const setIsDark = (d: boolean) => {
     setIsDarkState(d);
     localStorage.setItem("isDark", String(d));
+    applyTheme(theme, d);
   };
 
   return (
