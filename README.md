@@ -9,23 +9,29 @@
 | Service | Purpose | Login / Account |
 |---------|---------|-----------------|
 | **Lovable** | Frontend hosting, IDE, deployment | macieinvestments |
-| **Lovable Cloud (Supabase)** | Demo database — session jobs, customers, pipeline data | Managed by Lovable (no separate login) |
-| **Supabase Standalone** | Production database (future) | jamie@thermalvolt.co.nz |
+| **Supabase** | Database, auth, demo session data | jamie@thermalvolt.co.nz |
 | **Render** | Backend server (FastAPI) | jamie@ostelelectrical.co.nz |
 
 ### Notes
-- Lovable Cloud project ID: `ttpndqaghjuoqnngdwlh`
+- Supabase project URL: `https://qrkojbfayjrtrlrmgzry.supabase.co`
+- Frontend uses **`VITE_EXT_SUPABASE_URL`** and **`VITE_EXT_SUPABASE_ANON_KEY`** (publishable or legacy anon JWT). Set these locally in `.env` and in the Lovable project environment so the app does not use Lovable’s default Supabase pairing.
 - Render backend URL: `https://tradie-toolbelt-server.onrender.com`
-- Standalone Supabase URL: `https://sbthgkcmbxjgaqvntjja.supabase.co`
 - Backend currently only serves a health-check endpoint — no business logic yet
 - Add new services to this table as they are introduced
+
+### Local frontend (`.env`)
+
+| Variable | Description |
+|----------|-------------|
+| `VITE_EXT_SUPABASE_URL` | `https://qrkojbfayjrtrlrmgzry.supabase.co` |
+| `VITE_EXT_SUPABASE_ANON_KEY` | Supabase Dashboard → API Keys → publishable or anon key |
 
 ### Render Environment Variables
 The FastAPI backend on Render requires these env vars:
 
 | Variable | Value | Where to find |
 |----------|-------|---------------|
-| `SUPABASE_URL` | `https://sbthgkcmbxjgaqvntjja.supabase.co` | Supabase project URL |
+| `SUPABASE_URL` | `https://qrkojbfayjrtrlrmgzry.supabase.co` | Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Legacy `service_role` JWT (starts with `eyJ...`) | Supabase Dashboard → Settings → API Keys → Legacy anon, service_role |
 
 **Important**: Do NOT use the publishable/anon key. Do NOT use new-format keys starting with `sb_secret_...` — the current Python SDK requires the legacy JWT.
@@ -58,7 +64,10 @@ cd <YOUR_PROJECT_NAME>
 # Step 3: Install the necessary dependencies.
 npm i
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Step 4: Copy env template and fill in keys.
+cp .env.example .env
+
+# Step 5: Start the development server with auto-reloading and an instant preview.
 npm run dev
 ```
 

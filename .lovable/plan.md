@@ -1,20 +1,6 @@
 
+## Supabase: single project (`qrkojbfayjrtrlrmgzry`)
 
-## Fix: Login Using Wrong Supabase Instance
+All browser Supabase usage goes through `@/lib/supabase`, which reads **`VITE_EXT_SUPABASE_URL`** and **`VITE_EXT_SUPABASE_ANON_KEY`** only. `@/integrations/supabase/client` re-exports that client.
 
-### Problem
-`src/pages/LoginPage.tsx` line 3 imports from `@/integrations/supabase/client` (Lovable Cloud's Supabase — `ttpndqaghjuoqnngdwlh`). Your real users and auth live on the external instance (`qrkojbfayjrtrlrmgzry`). So every login attempt hits the wrong database → "Invalid login credentials".
-
-### Fix (1 file, 1 line)
-
-**`src/pages/LoginPage.tsx`** — Change the import:
-```typescript
-// Before
-import { supabase } from "@/integrations/supabase/client";
-
-// After
-import { supabase } from "@/lib/supabase";
-```
-
-That's it. No other changes needed.
-
+In Lovable’s project settings, set the same `VITE_EXT_*` variables so the hosted build does not fall back to Lovable’s default Supabase.
