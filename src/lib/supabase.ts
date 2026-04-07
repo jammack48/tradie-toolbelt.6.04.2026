@@ -3,16 +3,12 @@ import { createClient } from '@supabase/supabase-js';
 type FrontendEnv = ImportMetaEnv & {
   readonly VITE_SUPABASE_URL?: string;
   readonly VITE_SUPABASE_ANON_KEY?: string;
-  readonly VITE_SUPABASE_PUBLISHABLE_KEY?: string;
 };
 
 const env = import.meta.env as FrontendEnv;
 
 const SUPABASE_URL = env.VITE_SUPABASE_URL?.trim();
-const SUPABASE_ANON_KEY = (
-  env.VITE_SUPABASE_ANON_KEY ??
-  env.VITE_SUPABASE_PUBLISHABLE_KEY
-)?.trim();
+const SUPABASE_ANON_KEY = env.VITE_SUPABASE_ANON_KEY?.trim();
 
 if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   throw new Error(
