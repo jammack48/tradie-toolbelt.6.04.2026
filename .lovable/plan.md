@@ -1,106 +1,42 @@
 
-## Goal
-Make the backend connection issue diagnosable in one place and remove the guesswork around which key Render should use.
 
-## What’s happening now
-- The FastAPI backend reads:
-  - `SUPABASE_URL`
-  - `SUPABASE_SERVICE_KEY`
-- It then calls `create_client(url, key)` in `backend/main.py`.
-- The frontend only sees `connected / offline`, so there’s not enough detail to tell whether the failure is:
-  - missing env vars
-  - wrong URL
-  - wrong key type
-  - malformed key / whitespace
-  - SDK incompatibility
+## Plan: Fix 3 Issues (FAB Menu, New Quote, Dark Mode Toggle)
 
-## Important answer: which key?
-For the current backend code, the safest key to use is:
+### Issue 1: FAB Menu — Corrupted/duplicated JSX
+**File:** `src/pages/WorkHome.tsx` (lines 19-65)
 
-- **Supabase Dashboard → API Keys → “Legacy anon, service_role API keys” → `service_role`**
-- It should be the **long JWT-style key** starting with `eyJ...`
+The FABMenu component has duplicated JSX — two sets of `PopoverContent`, two sets of buttons overlapping. This creates broken rendering. Fix: rewrite the FABMenu with clean markup — just two big push buttons ("New Job" and "New Quote"), no "Charge Up" third option, with large touch-friendly sizing.
 
-Do **not** use:
-- the **publishable** key
-- the new `sb_secret_...` key for this current Python health-check path unless we explicitly refactor/test support for it
+### Issue 2: New Quote doesn't work
+**File:** `src/pages/WorkHome.tsx` (same FABMenu)
 
-## Plan
+The corrupted FABMenu JSX likely causes the "New Quote" button to malfunction or navigate incorrectly. The clean rewrite in Issue 1 fixes this — the button navigates to `/quote/new` which correctly triggers the QuoteFunnel. If the "Quote not found" screen persists after fixing the FAB, it's a separate routing issue — but the corrupt JSX is the most likely cause.
 
-### 1. Add structured backend diagnostics
-Update `backend/main.py` so `/health` returns a safe debug object like:
-- whether `SUPABASE_URL` exists
-- whether `SUPABASE_SERVICE_KEY` exists
-- detected key type:
-  - `legacy_jwt`
-  - `new_secret`
-  - `unknown`
-- masked key preview only (example: `eyJ...abcd`, never full secret)
-- exact exception class/message when connection fails
-- whether the client was created successfully
-- whether the DB ping succeeded
+### Issue 3: Dark mode toggle reverts
+**File:** `src/contexts/ThemeContext.tsx`
 
-This will let the frontend show the real failure reason instead of just “DB offline”.
+The `applyTheme` function uses `classList.toggle("light", !isDark)` — this adds `.light` class when NOT dark. The CSS uses `.light` as the selector for light-mode variables. The code looks correct in isolation. The likely problem: the Lovable preview script or HMR re-mounts the ThemeProvider, causing the `useState` initializer to re-read `localStorage`. If the `localStorage.setItem` in `setIsDark` hasn't flushed before the re-mount, it resets.
 
-### 2. Make the health check more explicit
-Refine the check so the backend distinguishes:
-- `not_configured`
-- `invalid_key`
-- `client_init_failed`
-- `connected`
-- `offline`
-- `query_failed`
+**Fix:** Add `requestAnimationFrame` or `queueMicrotask` in the `setIsDark` function to ensure `applyTheme` runs synchronously alongside the localStorage write, and also apply the theme directly in `setIsDark`/`setTheme` (not just via useEffect) to prevent flash-back:
 
-That way you’ll know if the problem is the key itself vs a later query failure.
+```typescript
+const setIsDark = (d: boolean) => {
+  setIsDarkState(d);
+  localStorage.setItem("isDark", String(d));
+  applyTheme(theme, d); // immediate DOM update
+};
 
-### 3. Surface the detailed diagnostics in the UI
-Update the backend status/log UI so it shows:
-- server status
-- DB status
-- detected key type
-- last error message
-- env var presence summary
+const setTheme = (t: Theme) => {
+  setThemeState(t);
+  localStorage.setItem("theme", t);
+  applyTheme(t, isDark); // immediate DOM update
+};
+```
 
-Example log lines:
-- `SUPABASE_URL found`
-- `SUPABASE_SERVICE_KEY found (type: new_secret)`
-- `Supabase client init failed: Invalid API key`
-- `Expected key type: legacy service_role JWT`
+### Files Modified (2 files only)
+1. `src/pages/WorkHome.tsx` — Rewrite FABMenu with clean 2-button layout
+2. `src/contexts/ThemeContext.tsx` — Add immediate DOM apply in setters
 
-### 4. Add a dedicated debug section in the panel
-Extend `BackendLogPanel` with a compact “Connection Debug” block showing:
-- URL configured: yes/no
-- key configured: yes/no
-- key type: legacy_jwt / new_secret / unknown
-- last backend error
-- last successful ping time
+### What is NOT changed
+Everything else stays untouched. No table changes, no service changes, no routing changes.
 
-This gives you a single on-screen source of truth.
-
-### 5. Document the exact Render setup in README
-Add a short “Standalone DB connection” note to `README.md`:
-- `SUPABASE_URL = https://sbthgkcmbxjgaqvntjja.supabase.co`
-- `SUPABASE_SERVICE_KEY = legacy service_role JWT key from API Keys page`
-- note that the current backend health check does **not** use the publishable key
-- note that the new `sb_secret_...` key may not work with the current Python setup
-
-## Files to change
-- `backend/main.py`
-  - add safe env/key diagnostics
-  - return structured health response
-- `src/contexts/BackendContext.tsx`
-  - parse new debug fields from `/health`
-  - store last error / key type / env presence
-- `src/components/BackendLogPanel.tsx`
-  - display detailed diagnostics
-- `src/components/BackendStatus.tsx`
-  - optionally improve tooltip text with DB reason
-- `README.md`
-  - document the correct key source and current expectation
-
-## Expected result
-After this change, the app will no longer just say “DB offline”. It will tell you something like:
-- `Key type detected: new_secret`
-- `Client init failed: Invalid API key`
-- `Expected: legacy service_role JWT from API Keys > Legacy anon, service_role`
-
-That will make the fix immediate and remove the key confusion.
