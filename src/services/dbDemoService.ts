@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase";
 import type { DemoCustomer, DemoJob } from "@/types/demoData";
 import type { Stage } from "@/data/dummyJobs";
 import customersSeed from "@/demo-data/customers.json";

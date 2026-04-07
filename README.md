@@ -9,16 +9,25 @@
 | Service | Purpose | Login / Account |
 |---------|---------|-----------------|
 | **Lovable** | Frontend hosting, IDE, deployment | macieinvestments |
-| **Lovable Cloud (Supabase)** | Demo database — session jobs, customers, pipeline data | Managed by Lovable (no separate login) |
-| **Supabase Standalone** | Production database (future) | jamie@thermalvolt.co.nz |
+| **Supabase (Personal Project)** | Auth + app data (single source of truth) | jamie@thermalvolt.co.nz |
 | **Render** | Backend server (FastAPI) | jamie@ostelelectrical.co.nz |
 
 ### Notes
-- Lovable Cloud project ID: `ttpndqaghjuoqnngdwlh`
 - Render backend URL: `https://tradie-toolbelt-server.onrender.com`
-- Standalone Supabase URL: `https://sbthgkcmbxjgaqvntjja.supabase.co`
+- Supabase URL: configure via `VITE_SUPABASE_URL` in your environment
 - Backend currently only serves a health-check endpoint — no business logic yet
 - Add new services to this table as they are introduced
+
+### Frontend Environment Variables (required)
+
+Set these for local/dev/prod builds so the app uses only your Supabase project:
+
+| Variable | Purpose |
+|----------|---------|
+| `VITE_SUPABASE_URL` | Your personal Supabase project URL |
+| `VITE_SUPABASE_ANON_KEY` | Your personal Supabase anon/public key |
+
+The app intentionally blocks a known Lovable Cloud project ref at runtime to prevent accidental split-database usage.
 
 ### Render Environment Variables
 The FastAPI backend on Render requires these env vars:
