@@ -11,9 +11,11 @@ import type { DemoCustomer } from "@/types/demoData";
 import { formatCustomerAddressSubtitle } from "@/lib/customerAddress";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { AiQuickQuoteDraft } from "@/types/aiQuickQuote";
-import { extractQuickQuoteWithAi, filesToDataUrls } from "@/services/aiQuoteService";
+import { extractQuickQuoteWithAi, filesToDataUrls, resolveCustomerWithAi } from "@/services/aiQuoteService";
 import { toast } from "@/hooks/use-toast";
 import { sanitizeTranscript } from "@/lib/speechText";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { Label } from "@/components/ui/label";
 
 export interface FunnelResult {
   customer: DemoCustomer | null;
@@ -71,15 +73,30 @@ function QuickAiCapture({
   customers,
   materials,
   onApply,
+  onCreateCustomer,
 }: {
   customers: DemoCustomer[];
   materials: { id: string; name: string; unit: string; unitPrice: number }[];
   onApply: (draft: AiQuickQuoteDraft, matchedCustomer: DemoCustomer | null) => void;
+  onCreateCustomer: (customer: Omit<DemoCustomer, "id">) => Promise<number | undefined>;
 }) {
   const [transcript, setTranscript] = useState("");
   const [recording, setRecording] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [applying, setApplying] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
+  const [draft, setDraft] = useState<AiQuickQuoteDraft | null>(null);
+  const [customerChoice, setCustomerChoice] = useState("none");
+  const [matchScores, setMatchScores] = useState<
+    Array<{ id: number; name: string; address: string; phone?: string; email?: string; score: number; reasons: string[] }>
+  >([]);
+  const [reviewAddress, setReviewAddress] = useState("");
+  const [reviewScope, setReviewScope] = useState("");
+  const [extraDetails, setExtraDetails] = useState("");
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerEmail, setNewCustomerEmail] = useState("");
+  const [newCustomerAddress, setNewCustomerAddress] = useState("");
   const recRef = useRef<SpeechRecognition | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const transcriptRef = useRef("");
@@ -161,15 +178,112 @@ function QuickAiCapture({
         customers,
         materials,
       });
-      const matched = typeof draft.customerId === "number"
-        ? customers.find((c) => c.id === draft.customerId) ?? null
-        : null;
-      onApply(draft, matched);
-      toast({ title: "AI draft ready", description: "Review prefilled quote details." });
+
+      let defaultChoice = "none";
+      let rankedMatches: Array<{ id: number; name: string; address: string; phone?: string; email?: string; score: number; reasons: string[] }> = [];
+      try {
+        const resolution = await resolveCustomerWithAi({
+          customerName: draft.customerName || "",
+          customerPhone: draft.customerPhone || "",
+          customerEmail: draft.customerEmail || "",
+          siteAddress: draft.siteAddress || "",
+          customers,
+        });
+        rankedMatches = resolution.topMatches ?? [];
+        if (resolution.canAutoSelect && typeof resolution.bestMatchId === "number") {
+          defaultChoice = `match:${resolution.bestMatchId}`;
+        } else if (resolution.shouldCreateNew) {
+          defaultChoice = "create";
+        } else if (typeof resolution.bestMatchId === "number" && resolution.bestMatchScore >= 0.62) {
+          defaultChoice = `match:${resolution.bestMatchId}`;
+        }
+        setNewCustomerName(resolution.extractedCustomer?.name || draft.customerName || "");
+        setNewCustomerPhone(resolution.extractedCustomer?.phone || draft.customerPhone || "");
+        setNewCustomerEmail(resolution.extractedCustomer?.email || draft.customerEmail || "");
+        setNewCustomerAddress(resolution.extractedCustomer?.address || draft.siteAddress || "");
+      } catch {
+        // Fallback to existing extraction result if resolver endpoint fails.
+        const matched = typeof draft.customerId === "number"
+          ? customers.find((c) => c.id === draft.customerId) ?? null
+          : null;
+        if (matched) defaultChoice = `match:${matched.id}`;
+        setNewCustomerName(draft.customerName || "");
+        setNewCustomerPhone(draft.customerPhone || "");
+        setNewCustomerEmail(draft.customerEmail || "");
+        setNewCustomerAddress(draft.siteAddress || "");
+      }
+
+      setMatchScores(rankedMatches);
+      setDraft(draft);
+      setCustomerChoice(defaultChoice);
+      setReviewAddress(draft.siteAddress || "");
+      setReviewScope((draft.scopeSummary || transcript.trim()).trim());
+      setExtraDetails("");
+      toast({ title: "AI draft ready", description: "Confirm customer, address and scope." });
     } catch (e) {
       toast({ title: "AI extraction failed", description: e instanceof Error ? e.message : "Try again.", variant: "destructive" });
     } finally {
       setExtracting(false);
+    }
+  };
+
+  const applyReviewedDraft = async () => {
+    if (!draft) return;
+    const trimmedScope = reviewScope.trim();
+    if (!trimmedScope) {
+      toast({ title: "Scope is missing", description: "Confirm the job description before applying.", variant: "destructive" });
+      return;
+    }
+    setApplying(true);
+    try {
+      let selectedCustomer: DemoCustomer | null = null;
+      if (customerChoice.startsWith("match:")) {
+        const selectedId = Number(customerChoice.replace("match:", ""));
+        selectedCustomer = customers.find((c) => c.id === selectedId) ?? null;
+      } else if (customerChoice === "create") {
+        const name = newCustomerName.trim();
+        if (!name) {
+          toast({ title: "Customer name required", description: "Add a name to create a new customer.", variant: "destructive" });
+          return;
+        }
+        const payload: Omit<DemoCustomer, "id"> = {
+          name,
+          phone: newCustomerPhone.trim(),
+          email: newCustomerEmail.trim(),
+          address: newCustomerAddress.trim() || reviewAddress.trim(),
+          jobs: 0,
+          status: "leads",
+          totalSpend: 0,
+          notes: [],
+          contacts: [],
+          jobHistory: [],
+        };
+        const createdId = await onCreateCustomer(payload);
+        if (!createdId) {
+          toast({ title: "Could not create customer", description: "Please try again or pick an existing customer.", variant: "destructive" });
+          return;
+        }
+        selectedCustomer = { id: createdId, ...payload };
+      }
+
+      const finalScope = [trimmedScope, extraDetails.trim()]
+        .filter(Boolean)
+        .join("\n\n");
+      const finalDraft: AiQuickQuoteDraft = {
+        ...draft,
+        scopeSummary: finalScope,
+        siteAddress: reviewAddress.trim() || draft.siteAddress,
+      };
+      onApply(finalDraft, selectedCustomer);
+      setDraft(null);
+      setMatchScores([]);
+      setCustomerChoice("none");
+      setTranscript("");
+      setPhotos([]);
+      setExtraDetails("");
+      toast({ title: "Quote details applied", description: "AI details have been reviewed and prefilled." });
+    } finally {
+      setApplying(false);
     }
   };
 
@@ -213,6 +327,152 @@ function QuickAiCapture({
           </Button>
         </div>
       </div>
+      {draft && (
+        <div className="rounded-lg border border-border bg-background/60 p-3 space-y-4">
+          <div>
+            <p className="text-sm font-semibold text-card-foreground">Review AI details</p>
+            <p className="text-xs text-muted-foreground">Confirm customer, site and scope before starting the quote.</p>
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Customer match</Label>
+            <RadioGroup value={customerChoice} onValueChange={setCustomerChoice} className="space-y-2">
+              {matchScores.map((m) => (
+                <label
+                  key={m.id}
+                  htmlFor={`customer-match-${m.id}`}
+                  className="flex items-start gap-2 rounded-md border border-border bg-card px-2.5 py-2 cursor-pointer"
+                >
+                  <RadioGroupItem value={`match:${m.id}`} id={`customer-match-${m.id}`} />
+                  <div className="min-w-0">
+                    <p className="text-sm font-medium text-card-foreground">{m.name}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {(m.phone || "").trim() || (m.email || "").trim() || m.address || "No contact details"}
+                      {" · "}
+                      match {Math.round((m.score || 0) * 100)}%
+                    </p>
+                    {m.reasons.length > 0 && (
+                      <p className="text-[11px] text-muted-foreground mt-0.5">{m.reasons.join(" · ")}</p>
+                    )}
+                  </div>
+                </label>
+              ))}
+              <label
+                htmlFor="customer-match-create"
+                className="flex items-start gap-2 rounded-md border border-border bg-card px-2.5 py-2 cursor-pointer"
+              >
+                <RadioGroupItem value="create" id="customer-match-create" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-card-foreground">Create new customer</p>
+                  <p className="text-xs text-muted-foreground">Use the extracted details to create a new customer record.</p>
+                </div>
+              </label>
+              <label
+                htmlFor="customer-match-none"
+                className="flex items-start gap-2 rounded-md border border-border bg-card px-2.5 py-2 cursor-pointer"
+              >
+                <RadioGroupItem value="none" id="customer-match-none" />
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-card-foreground">No customer yet</p>
+                  <p className="text-xs text-muted-foreground">Continue without linking this quote to a customer.</p>
+                </div>
+              </label>
+            </RadioGroup>
+          </div>
+
+          {customerChoice === "create" && (
+            <div className="space-y-2 rounded-md border border-border bg-card p-2.5">
+              <Input
+                value={newCustomerName}
+                onChange={(e) => setNewCustomerName(e.target.value)}
+                placeholder="Customer name"
+              />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <Input
+                  value={newCustomerPhone}
+                  onChange={(e) => setNewCustomerPhone(e.target.value)}
+                  placeholder="Phone"
+                />
+                <Input
+                  value={newCustomerEmail}
+                  onChange={(e) => setNewCustomerEmail(e.target.value)}
+                  placeholder="Email"
+                />
+              </div>
+              <Input
+                value={newCustomerAddress}
+                onChange={(e) => setNewCustomerAddress(e.target.value)}
+                placeholder="Customer address"
+              />
+            </div>
+          )}
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Site address</Label>
+            <Input
+              value={reviewAddress}
+              onChange={(e) => setReviewAddress(e.target.value)}
+              placeholder="Confirm site address"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Job description</Label>
+            <Textarea
+              value={reviewScope}
+              onChange={(e) => setReviewScope(e.target.value)}
+              placeholder="Is this job summary correct?"
+              className="min-h-[90px]"
+            />
+            <Textarea
+              value={extraDetails}
+              onChange={(e) => setExtraDetails(e.target.value)}
+              placeholder="Anything else to add before we build the quote?"
+              className="min-h-[70px]"
+            />
+          </div>
+
+          {(draft.missingFields.length > 0 || draft.reviewFlags.length > 0) && (
+            <div className="rounded-md border border-amber-300/50 bg-amber-50/50 p-2.5 space-y-2">
+              {draft.missingFields.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-amber-900">AI says details are missing:</p>
+                  <ul className="text-xs text-amber-900/90 list-disc pl-4">
+                    {draft.missingFields.map((f) => <li key={f}>{f}</li>)}
+                  </ul>
+                </div>
+              )}
+              {draft.reviewFlags.length > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-amber-900">Review flags:</p>
+                  <ul className="text-xs text-amber-900/90 list-disc pl-4">
+                    {draft.reviewFlags.map((f) => <li key={f}>{f}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex flex-wrap gap-2">
+            <Button type="button" size="sm" disabled={applying} onClick={applyReviewedDraft} className="gap-1">
+              {applying ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+              Apply reviewed draft
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="ghost"
+              disabled={applying}
+              onClick={() => {
+                setDraft(null);
+                setMatchScores([]);
+              }}
+            >
+              Discard
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -544,7 +804,7 @@ function StepBundle({
 
 /* ── Main Funnel (pure content, no page shell) ─────────── */
 export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initialCustomer }: QuoteFunnelProps) {
-  const { customers, materials, usingProdData } = useDemoData();
+  const { customers, materials, usingProdData, addCustomer } = useDemoData();
   const demoBundles = usingProdData ? [] : bundleTemplates;
   const startStep = initialCustomer ? 2 : 1;
   const [step, _setStep] = useState(startStep);
@@ -593,7 +853,7 @@ export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initial
 
   return (
     <div className="max-w-lg mx-auto">
-      <QuickAiCapture customers={customers} materials={materials} onApply={handleApplyAiDraft} />
+      <QuickAiCapture customers={customers} materials={materials} onApply={handleApplyAiDraft} onCreateCustomer={addCustomer} />
       {step === 1 && (
         <StepCustomer onSelect={handleSelectCustomer} onSkip={handleSkipCustomer} label={label} customers={customers} />
       )}

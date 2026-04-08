@@ -18,6 +18,8 @@ export interface AiSuggestedLabour {
 export interface AiQuickQuoteDraft {
   customerId?: number;
   customerName?: string;
+  customerPhone?: string;
+  customerEmail?: string;
   customerConfidence?: number;
   isNewCustomer?: boolean;
   siteAddress: string;
@@ -28,5 +30,31 @@ export interface AiQuickQuoteDraft {
   assumptions: string[];
   missingFields: string[];
   reviewFlags: string[];
+}
+
+export interface AiResolvedCustomerMatch {
+  id: number;
+  name: string;
+  address: string;
+  phone?: string;
+  email?: string;
+  score: number;
+  reasons: string[];
+}
+
+export interface AiResolvedCustomerDraft {
+  name: string;
+  phone: string;
+  email: string;
+  address: string;
+}
+
+export interface AiResolvedCustomerResult {
+  extractedCustomer: AiResolvedCustomerDraft;
+  topMatches: AiResolvedCustomerMatch[];
+  bestMatchId?: number;
+  bestMatchScore: number;
+  canAutoSelect: boolean;
+  shouldCreateNew: boolean;
 }
 

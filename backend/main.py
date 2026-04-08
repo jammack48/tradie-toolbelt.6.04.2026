@@ -1,6 +1,7 @@
 import json
 import os
 from difflib import SequenceMatcher
+import re
 from typing import Any
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,6 +44,14 @@ class QuickQuoteExtractRequest(BaseModel):
     candidate_materials: list[CandidateMaterial] = Field(default_factory=list)
 
 
+class ResolveCustomerRequest(BaseModel):
+    customer_name: str = ""
+    customer_phone: str = ""
+    customer_email: str = ""
+    site_address: str = ""
+    candidate_customers: list[CandidateCustomer] = Field(default_factory=list)
+
+
 def _best_customer(name: str, candidates: list[CandidateCustomer]) -> tuple[int | None, float]:
     q = (name or "").strip().lower()
     if not q:
@@ -75,6 +84,112 @@ def _best_material(name: str, candidates: list[CandidateMaterial]) -> tuple[Cand
     if best_score < 0.5:
         return None, best_score
     return best, min(best_score, 1.0)
+
+
+def _normalize_phone(value: str) -> str:
+    return re.sub(r"\D+", "", value or "")
+
+
+def _normalize_text(value: str) -> str:
+    return re.sub(r"\s+", " ", (value or "").strip().lower())
+
+
+def _address_overlap_score(query: str, candidate: str) -> float:
+    q_words = {w for w in re.split(r"\W+", _normalize_text(query)) if len(w) >= 3}
+    c_words = {w for w in re.split(r"\W+", _normalize_text(candidate)) if len(w) >= 3}
+    if not q_words or not c_words:
+        return 0.0
+    return len(q_words.intersection(c_words)) / len(q_words)
+
+
+def _score_customer_candidate(
+    *,
+    customer_name: str,
+    customer_phone: str,
+    customer_email: str,
+    site_address: str,
+    candidate: CandidateCustomer,
+) -> tuple[float, list[str]]:
+    reasons: list[str] = []
+    score = 0.0
+
+    q_name = _normalize_text(customer_name)
+    c_name = _normalize_text(candidate.name)
+    if q_name and c_name:
+        name_score = SequenceMatcher(None, q_name, c_name).ratio()
+        score += name_score * 0.5
+        if name_score >= 0.86:
+            reasons.append("Strong name match")
+        elif name_score >= 0.7:
+            reasons.append("Possible name match")
+
+    q_phone = _normalize_phone(customer_phone)
+    c_phone = _normalize_phone(candidate.phone or "")
+    if q_phone and c_phone:
+        if q_phone == c_phone:
+            score += 0.32
+            reasons.append("Phone matches")
+        elif len(q_phone) >= 8 and (q_phone in c_phone or c_phone in q_phone):
+            score += 0.2
+            reasons.append("Phone partially matches")
+
+    q_email = _normalize_text(customer_email)
+    c_email = _normalize_text(candidate.email or "")
+    if q_email and c_email:
+        if q_email == c_email:
+            score += 0.32
+            reasons.append("Email matches")
+        else:
+            q_local = q_email.split("@")[0] if "@" in q_email else ""
+            c_local = c_email.split("@")[0] if "@" in c_email else ""
+            if q_local and c_local and q_local == c_local:
+                score += 0.18
+                reasons.append("Email local-part matches")
+
+    q_addr = _normalize_text(site_address)
+    c_addr = _normalize_text(candidate.address or "")
+    if q_addr and c_addr:
+        overlap = _address_overlap_score(q_addr, c_addr)
+        if overlap > 0:
+            score += min(0.26, overlap * 0.26)
+            if overlap >= 0.6:
+                reasons.append("Address overlap is strong")
+            elif overlap >= 0.3:
+                reasons.append("Address overlap")
+
+    return min(score, 1.0), reasons
+
+
+def _rank_customer_candidates(
+    *,
+    customer_name: str,
+    customer_phone: str,
+    customer_email: str,
+    site_address: str,
+    candidates: list[CandidateCustomer],
+) -> list[dict[str, Any]]:
+    ranked: list[dict[str, Any]] = []
+    for c in candidates:
+        score, reasons = _score_customer_candidate(
+            customer_name=customer_name,
+            customer_phone=customer_phone,
+            customer_email=customer_email,
+            site_address=site_address,
+            candidate=c,
+        )
+        ranked.append(
+            {
+                "id": c.id,
+                "name": c.name,
+                "address": c.address or "",
+                "phone": c.phone or "",
+                "email": c.email or "",
+                "score": round(score, 4),
+                "reasons": reasons,
+            }
+        )
+    ranked.sort(key=lambda item: item["score"], reverse=True)
+    return ranked
 
 
 def _load_json(content: str) -> dict[str, Any]:
@@ -205,6 +320,8 @@ async def quick_quote_extract(payload: QuickQuoteExtractRequest):
             "material_candidates": [m.model_dump() for m in payload.candidate_materials][:500],
             "output_schema": {
                 "customer_name": "string",
+                "customer_phone": "string",
+                "customer_email": "string",
                 "site_address": "string",
                 "scope_summary": "string",
                 "materials_suggested": [
@@ -237,6 +354,8 @@ async def quick_quote_extract(payload: QuickQuoteExtractRequest):
         parsed = _load_json(raw)
 
         customer_name = str(parsed.get("customer_name") or "").strip()
+        customer_phone = str(parsed.get("customer_phone") or "").strip()
+        customer_email = str(parsed.get("customer_email") or "").strip()
         customer_id, customer_conf = _best_customer(customer_name, payload.candidate_customers)
 
         materials_out: list[dict[str, Any]] = []
@@ -279,6 +398,8 @@ async def quick_quote_extract(payload: QuickQuoteExtractRequest):
         return {
             "customerId": customer_id,
             "customerName": customer_name or None,
+            "customerPhone": customer_phone or None,
+            "customerEmail": customer_email or None,
             "customerConfidence": customer_conf if customer_name else 0.0,
             "isNewCustomer": customer_id is None,
             "siteAddress": str(parsed.get("site_address") or "").strip(),
@@ -294,3 +415,40 @@ async def quick_quote_extract(payload: QuickQuoteExtractRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI extraction error: {type(e).__name__}: {str(e)[:180]}")
+
+
+@app.post("/ai/resolve-customer")
+async def resolve_customer(payload: ResolveCustomerRequest):
+    ranked = _rank_customer_candidates(
+        customer_name=payload.customer_name,
+        customer_phone=payload.customer_phone,
+        customer_email=payload.customer_email,
+        site_address=payload.site_address,
+        candidates=payload.candidate_customers,
+    )
+    top = ranked[:3]
+    best = top[0] if top else None
+    best_score = float(best["score"]) if best else 0.0
+
+    has_extracted_identity = any(
+        [
+            (payload.customer_name or "").strip(),
+            (payload.customer_phone or "").strip(),
+            (payload.customer_email or "").strip(),
+        ]
+    )
+    should_create_new = bool(has_extracted_identity and best_score < 0.62)
+
+    return {
+        "extractedCustomer": {
+            "name": (payload.customer_name or "").strip(),
+            "phone": (payload.customer_phone or "").strip(),
+            "email": (payload.customer_email or "").strip(),
+            "address": (payload.site_address or "").strip(),
+        },
+        "topMatches": top,
+        "bestMatchId": best["id"] if best else None,
+        "bestMatchScore": best_score,
+        "canAutoSelect": bool(best and best_score >= 0.86),
+        "shouldCreateNew": should_create_new,
+    }
