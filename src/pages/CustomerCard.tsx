@@ -27,7 +27,10 @@ export default function CustomerCard() {
   const [activeTab, setActiveTab] = useState<CustTab>(initialTab);
 
   const { customers, addJob } = useDemoData();
-  const customer = useMemo(() => customers.find((c) => c.id === Number(id)), [customers, id]);
+  const customer = useMemo(
+    () => customers.find((c) => String(c.id) === id || c.id === Number(id)),
+    [customers, id]
+  );
 
   if (!customer) {
     return (

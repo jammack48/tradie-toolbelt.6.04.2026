@@ -9,7 +9,13 @@ import {
   fetchCustomers,
   dbAddCustomer,
 } from "@/services/dbDemoService";
+import {
+  fetchProdCustomers,
+  fetchProdCatalogueMaterials,
+  insertProdCustomer,
+} from "@/services/prodDataService";
 import { useAppMode } from "@/contexts/AppModeContext";
+import { useUserSettings } from "@/contexts/UserSettingsContext";
 import materialsSeed from "@/demo-data/materials.json";
 import scheduleSeed from "@/demo-data/schedule.json";
 
@@ -24,20 +30,31 @@ interface DemoDataContextType {
   addJob: (job: { client: string; jobName: string; value: number; stage: Stage }) => void;
   resetDemo: () => void;
   loading: boolean;
+  usingProdData: boolean;
 }
 
 const DemoDataContext = createContext<DemoDataContextType | undefined>(undefined);
 
 export function DemoDataProvider({ children }: { children: ReactNode }) {
   const { trade } = useAppMode();
+  const { userId, companyId, loading: settingsLoading } = useUserSettings();
+  const useProdDataset = Boolean(userId && companyId);
+
   const [jobs, setJobs] = useState<DemoJob[]>([]);
   const [customers, setCustomers] = useState<DemoCustomer[]>([]);
+  const [materials, setMaterials] = useState<DemoMaterial[]>(() => materialsSeed as DemoMaterial[]);
   const [loading, setLoading] = useState(true);
   const [sessionId, setSessionId] = useState<string | null>(null);
 
-  // Initialize or switch session when trade changes
   useEffect(() => {
     if (!trade) {
+      setJobs([]);
+      setSessionId(null);
+      setLoading(false);
+      return;
+    }
+
+    if (useProdDataset) {
       setJobs([]);
       setSessionId(null);
       setLoading(false);
@@ -65,41 +82,75 @@ export function DemoDataProvider({ children }: { children: ReactNode }) {
     })();
 
     return () => { cancelled = true; };
-  }, [trade]);
+  }, [trade, useProdDataset]);
 
-  // Load customers on mount
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
+      if (settingsLoading) return;
+
+      if (useProdDataset && companyId) {
+        setLoading(true);
+        try {
+          const [custs, mats] = await Promise.all([
+            fetchProdCustomers(companyId),
+            fetchProdCatalogueMaterials(companyId),
+          ]);
+          if (!cancelled) {
+            setCustomers(custs);
+            setMaterials(mats.length > 0 ? mats : (materialsSeed as DemoMaterial[]));
+          }
+        } catch (err) {
+          console.error("Failed to load production data:", err);
+          if (!cancelled) {
+            setCustomers([]);
+            setMaterials(materialsSeed as DemoMaterial[]);
+          }
+        } finally {
+          if (!cancelled) setLoading(false);
+        }
+        return;
+      }
+
+      setLoading(true);
       try {
         const custs = await fetchCustomers();
         if (!cancelled) setCustomers(custs);
       } catch (err) {
         console.error("Failed to load customers:", err);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setMaterials(materialsSeed as DemoMaterial[]);
+          setLoading(false);
+        }
       }
     })();
-    return () => { cancelled = true; };
-  }, []);
 
-  // Update job stage — persists to DB
+    return () => { cancelled = true; };
+  }, [useProdDataset, companyId, settingsLoading]);
+
   const updateJobStage = useCallback((jobId: string, stage: Stage) => {
-    // Optimistic local update
     setJobs((prev) =>
       prev.map((j) => (j.id === jobId ? { ...j, stage, ageDays: 0 } : j))
     );
 
-    // Persist to DB
+    if (useProdDataset) return;
+
     if (sessionId) {
       updateSessionJobStage(sessionId, jobId, stage).catch((err) => {
         console.error("Failed to persist stage change:", err);
       });
     }
-  }, [sessionId]);
+  }, [sessionId, useProdDataset]);
 
   const addCustomer = useCallback(async (customer: Omit<DemoCustomer, "id">): Promise<number | undefined> => {
     try {
+      if (useProdDataset && companyId) {
+        const newCust = await insertProdCustomer(companyId, customer);
+        setCustomers((prev) => [...prev, newCust]);
+        return newCust.id;
+      }
       const newCust = await dbAddCustomer(customer);
       setCustomers((prev) => [...prev, newCust]);
       return newCust.id;
@@ -107,7 +158,7 @@ export function DemoDataProvider({ children }: { children: ReactNode }) {
       console.error("Failed to add customer:", err);
       return undefined;
     }
-  }, []);
+  }, [useProdDataset, companyId]);
 
   const addJob = useCallback((job: { client: string; jobName: string; value: number; stage: Stage }) => {
     const tempId = `JOB-${Date.now()}`;
@@ -124,6 +175,8 @@ export function DemoDataProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const resetDemo = useCallback(() => {
+    if (useProdDataset) return;
+
     if (!trade) {
       setJobs([]);
       return;
@@ -133,12 +186,10 @@ export function DemoDataProvider({ children }: { children: ReactNode }) {
 
     (async () => {
       try {
-        // Reset existing session
         if (sessionId) {
           await resetSession(sessionId, trade);
         }
 
-        // Create fresh session
         const newSid = await getOrCreateSession(trade);
         setSessionId(newSid);
 
@@ -151,12 +202,12 @@ export function DemoDataProvider({ children }: { children: ReactNode }) {
         setLoading(false);
       }
     })();
-  }, [trade, sessionId]);
+  }, [trade, sessionId, useProdDataset]);
 
   const value = useMemo<DemoDataContextType>(() => ({
     jobs,
     customers,
-    materials: materialsSeed as DemoMaterial[],
+    materials,
     schedule: scheduleSeed as DemoScheduleItem[],
     jobsByStage: (stage) => jobs.filter((job) => job.stage === stage),
     updateJobStage,
@@ -164,7 +215,8 @@ export function DemoDataProvider({ children }: { children: ReactNode }) {
     addJob,
     resetDemo,
     loading,
-  }), [jobs, customers, updateJobStage, addCustomer, addJob, resetDemo, loading]);
+    usingProdData: useProdDataset,
+  }), [jobs, customers, materials, updateJobStage, addCustomer, addJob, resetDemo, loading, useProdDataset]);
 
   return <DemoDataContext.Provider value={value}>{children}</DemoDataContext.Provider>;
 }

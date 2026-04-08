@@ -163,6 +163,125 @@ export type Database = {
         }
         Relationships: []
       }
+      prod_user_settings: {
+        Row: {
+          user_id: string
+          show_employee_mode: boolean
+          theme: string
+          is_dark: boolean
+          toolbar_position: string
+          business_profile: Json | null
+          tutorials_enabled: boolean
+          show_timesheet_mode: boolean
+          show_tools_mode: boolean
+          updated_at: string
+          van_stock: boolean | null
+          reconcile_docs: boolean | null
+          employee_can_quote: boolean | null
+          company_id: string | null
+        }
+        Insert: {
+          user_id: string
+          show_employee_mode?: boolean
+          theme?: string
+          is_dark?: boolean
+          toolbar_position?: string
+          business_profile?: Json | null
+          tutorials_enabled?: boolean
+          show_timesheet_mode?: boolean
+          show_tools_mode?: boolean
+          van_stock?: boolean | null
+          reconcile_docs?: boolean | null
+          employee_can_quote?: boolean | null
+          company_id?: string | null
+        }
+        Update: {
+          show_employee_mode?: boolean
+          theme?: string
+          is_dark?: boolean
+          toolbar_position?: string
+          business_profile?: Json | null
+          tutorials_enabled?: boolean
+          show_timesheet_mode?: boolean
+          show_tools_mode?: boolean
+          van_stock?: boolean | null
+          reconcile_docs?: boolean | null
+          employee_can_quote?: boolean | null
+          company_id?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      prod_customers: {
+        Row: {
+          id: string | number
+          company_id: string | null
+          name: string
+          phone: string | null
+          email: string | null
+          address: string | null
+          status: string | null
+          jobs: number | null
+          total_spend: number | null
+          notes: Json | null
+          contacts: Json | null
+          job_history: Json | null
+        }
+        Insert: {
+          id?: string
+          company_id?: string | null
+          name: string
+          phone?: string | null
+          email?: string | null
+          address?: string | null
+          status?: string | null
+          jobs?: number | null
+          total_spend?: number | null
+          notes?: Json | null
+          contacts?: Json | null
+          job_history?: Json | null
+        }
+        Update: {
+          name?: string
+          phone?: string | null
+          email?: string | null
+          address?: string | null
+          status?: string | null
+          jobs?: number | null
+          total_spend?: number | null
+          notes?: Json | null
+          contacts?: Json | null
+          job_history?: Json | null
+          company_id?: string | null
+        }
+        Relationships: []
+      }
+      prod_supplier_items: {
+        Row: {
+          id: string
+          company_id: string | null
+          name: string | null
+          unit: string | null
+          unit_price: number | null
+          sku: string | null
+        }
+        Insert: {
+          id?: string
+          company_id?: string | null
+          name?: string | null
+          unit?: string | null
+          unit_price?: number | null
+          sku?: string | null
+        }
+        Update: {
+          name?: string | null
+          unit?: string | null
+          unit_price?: number | null
+          sku?: string | null
+          company_id?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

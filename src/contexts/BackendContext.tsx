@@ -51,7 +51,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       if (res.ok) {
         const data = await res.json();
         setConnected(true);
-        const db = data.db ?? "unknown";
+        const db = typeof data.db === "string" ? data.db : "not_reported";
         setDbStatus(db);
         setDbConnected(db === "connected");
         if (data.debug) setDebug(data.debug);

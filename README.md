@@ -15,8 +15,9 @@
 ### Notes
 - Supabase project URL: `https://qrkojbfayjrtrlrmgzry.supabase.co`
 - Frontend uses **`VITE_EXT_SUPABASE_URL`** and **`VITE_EXT_SUPABASE_ANON_KEY`** (publishable or legacy anon JWT). Set these locally in `.env` and in the Lovable project environment so the app does not use Lovable’s default Supabase pairing.
+- **Logged-in users**: After sign-in, the app loads `prod_user_settings` (and creates a row for your `user_id` if missing). Set **`company_id`** on that row to your company UUID so the app loads **`prod_customers`** and **`prod_supplier_items`** instead of demo tables. Workspace choice (Office / On the tools / Timesheet) is stored in **`business_profile`** as `lastWorkspaceMode` (`manage` | `work` | `timesheet` | …) and optional `trade`.
 - Render backend URL: `https://tradie-toolbelt-server.onrender.com`
-- Backend currently only serves a health-check endpoint — no business logic yet
+- The FastAPI **`/health`** probe queries **`prod_user_settings`** (service role). If the Backend panel shows **`db: not_reported`** or **`query_failed`**, set **`SUPABASE_URL`** + **`SUPABASE_SERVICE_KEY`** (legacy `service_role` JWT) on Render and redeploy. **`Database: unknown`** in older builds meant the JSON had no `db` field; current frontend shows **`not_reported`** instead.
 - Add new services to this table as they are introduced
 
 ### Local frontend (`.env`)

@@ -10,6 +10,7 @@ import { ThemeProvider } from "@/contexts/ThemeContext";
 import { ToolbarPositionProvider, useToolbarPosition } from "@/contexts/ToolbarPositionContext";
 import { TutorialProvider } from "@/contexts/TutorialContext";
 import { AppModeProvider, useAppMode } from "@/contexts/AppModeContext";
+import { UserSettingsProvider } from "@/contexts/UserSettingsContext";
 import { DemoDataProvider } from "@/contexts/DemoDataContext";
 import { useState, useEffect } from "react";
 import { JobPrefixProvider } from "@/contexts/JobPrefixContext";
@@ -49,6 +50,7 @@ import { cn } from "@/lib/utils";
 import LoginPage from "./pages/LoginPage";
 import { resolveLandingPath } from "@/lib/navigation/resolveLanding";
 import EntryPage from "./pages/EntryPage";
+import PostLoginWorkspaceGate from "./pages/PostLoginWorkspaceGate";
 
 const queryClient = new QueryClient();
 
@@ -58,8 +60,10 @@ function AppLayout() {
   const navigate = useNavigate();
   const location = useLocation();
 
-  type EntryStep = "entry" | "login" | "trade" | "mode" | "ready";
+  type EntryStep = "entry" | "login" | "post_login_workspace" | "trade" | "mode" | "ready";
   const [entryStep, setEntryStep] = useState<EntryStep>(() => (mode && trade ? "ready" : "entry"));
+
+  const beginPostLogin = () => setEntryStep("post_login_workspace");
 
   useEffect(() => {
     if (entryStep === "trade" && trade) {
@@ -96,8 +100,17 @@ function AppLayout() {
   if (entryStep === "login") {
     return (
       <LoginPage
-        onSuccess={() => setEntryStep(trade ? (mode ? "ready" : "mode") : "trade")}
+        onSuccess={beginPostLogin}
         onBack={() => setEntryStep("entry")}
+      />
+    );
+  }
+
+  if (entryStep === "post_login_workspace") {
+    return (
+      <PostLoginWorkspaceGate
+        onComplete={() => setEntryStep("ready")}
+        onSignOut={() => setEntryStep("entry")}
       />
     );
   }
@@ -186,9 +199,10 @@ const App = () => (
       <BackendProvider>
       <JobPrefixProvider>
       <AppModeProvider>
-      <DemoDataProvider>
       <TutorialProvider>
       <ToolbarPositionProvider>
+      <UserSettingsProvider>
+      <DemoDataProvider>
       <ThresholdProvider>
       <NotificationStyleProvider>
         <TooltipProvider>
@@ -201,9 +215,10 @@ const App = () => (
         </TooltipProvider>
       </NotificationStyleProvider>
       </ThresholdProvider>
+      </DemoDataProvider>
+      </UserSettingsProvider>
       </ToolbarPositionProvider>
       </TutorialProvider>
-      </DemoDataProvider>
       </AppModeProvider>
       </JobPrefixProvider>
       </BackendProvider>

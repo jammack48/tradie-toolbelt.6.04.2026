@@ -81,11 +81,12 @@ async def health_check():
         return {"status": "ok", "db": "invalid_key", "debug": debug}
 
     try:
-        sb.table("_health_check_dummy").select("*").limit(1).execute()
+        sb.table("prod_user_settings").select("user_id").limit(1).execute()
         return {"status": "ok", "db": "connected", "debug": debug}
     except Exception as e:
         err = str(e)
         if "does not exist" in err or "42P01" in err:
-            return {"status": "ok", "db": "connected", "debug": debug}
+            debug["query_error"] = "Table prod_user_settings not found (run migrations on this Supabase project)"
+            return {"status": "ok", "db": "schema_mismatch", "debug": debug}
         debug["query_error"] = f"{type(e).__name__}: {err[:200]}"
         return {"status": "ok", "db": "query_failed", "debug": debug}
