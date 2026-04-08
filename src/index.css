@@ -55,6 +55,11 @@
     --sidebar-accent-foreground: 35 15% 80%;
     --sidebar-border: 30 10% 22%;
     --sidebar-ring: 145 25% 42%;
+
+    /* ThemeContext UI tuning (0–1, set via JS) */
+    --ui-panel-depth: 0;
+    --ui-highlight: 0;
+    --ui-highlight-border-width: 1px;
   }
 
   .light {
@@ -412,6 +417,38 @@
       transparent 8px,
       hsl(var(--border) / 0.4) 8px,
       hsl(var(--border) / 0.4) 9px
+    );
+  }
+
+  /* Quote line-item section bars — depth + highlight from ThemePicker */
+  .quote-section-header {
+    background: color-mix(
+      in hsl,
+      hsl(var(--muted)) calc(100% - var(--ui-panel-depth, 0) * 22%),
+      black calc(var(--ui-panel-depth, 0) * 22%)
+    );
+    border-width: var(--ui-highlight-border-width, 1px);
+    border-style: solid;
+    border-color: color-mix(
+      in hsl,
+      hsl(var(--border)) calc(100% - var(--ui-highlight, 0) * 35%),
+      hsl(var(--primary)) calc(var(--ui-highlight, 0) * 32%)
+    );
+    box-shadow: inset 0 1px 0 hsl(var(--foreground) / 0.07);
+  }
+
+  .light .quote-section-header {
+    background: color-mix(
+      in hsl,
+      hsl(var(--muted)) calc(100% - var(--ui-panel-depth, 0) * 12%),
+      black calc(var(--ui-panel-depth, 0) * 8%)
+    );
+    border-width: var(--ui-highlight-border-width, 1px);
+    border-style: solid;
+    border-color: color-mix(
+      in hsl,
+      hsl(var(--border)) calc(100% - var(--ui-highlight, 0) * 25%),
+      hsl(var(--primary)) calc(var(--ui-highlight, 0) * 22%)
     );
   }
 }

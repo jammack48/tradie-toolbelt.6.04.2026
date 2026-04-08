@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useMemo } from "react";
-import { DollarSign, Plus, Send, Save, X, ChevronDown, ChevronUp, Package, Search, Percent, RotateCcw, Trash2, GripVertical } from "lucide-react";
+import { DollarSign, Plus, Send, Save, X, ChevronDown, ChevronUp, Package, Search, Percent, RotateCcw, Trash2, GripVertical, Star } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,9 @@ import { catalogueItems as staticCatalogueItems, bundleTemplates, type Catalogue
 import { coverLetterTemplates } from "@/data/coverLetterTemplates";
 import { QuotePreview } from "@/components/quote/QuotePreview";
 import { useDemoData } from "@/contexts/DemoDataContext";
+import { useUserSettings } from "@/contexts/UserSettingsContext";
+import { loadQuoteFavorites, saveQuoteFavorite } from "@/lib/quoteFavorites";
+import { VoiceInputButton } from "@/components/VoiceInputButton";
 
 interface LineItem {
   id: string;
@@ -46,7 +49,7 @@ interface QuoteTabProps {
   onSendQuote?: (total: number) => void;
 }
 
-type Section = "labour" | "materials" | "extras";
+export type Section = "labour" | "materials" | "extras";
 
 const HOURLY_RATE = 85;
 
@@ -55,21 +58,32 @@ function genId() { return `qi-${nextId++}`; }
 function blockId() { return `blk-${nextId++}`; }
 
 /* ── Section header row ─────────────────────────────────── */
-function SectionHeader({ label, total, isOpen, onToggle }: { label: string; total: number; isOpen: boolean; onToggle: () => void; }) {
+function SectionHeader({ label, total, isOpen, onToggle, onAdd }: { label: string; total: number; isOpen: boolean; onToggle: () => void; onAdd: () => void }) {
   return (
-    <button onClick={onToggle} className="w-full flex items-center justify-between px-3 py-2 rounded-lg bg-muted/60 hover:bg-muted transition-colors cursor-pointer">
-      <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
-      <div className="flex items-center gap-2">
-        <span className="text-sm font-bold">${total.toFixed(2)}</span>
-        {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
-      </div>
-    </button>
+    <div className="flex items-stretch gap-1 rounded-lg quote-section-header">
+      <button
+        type="button"
+        onClick={(e) => { e.preventDefault(); onAdd(); }}
+        className="shrink-0 px-2 flex items-center justify-center rounded-md hover:bg-muted/50 text-primary transition-colors"
+        aria-label={`Add ${label} line`}
+        title={`Add to ${label}`}
+      >
+        <Plus className="w-4 h-4" />
+      </button>
+      <button type="button" onClick={onToggle} className="flex-1 flex items-center justify-between min-w-0 px-2 py-2 rounded-md text-left hover:bg-muted/30 transition-colors">
+        <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{label}</span>
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-bold">${total.toFixed(2)}</span>
+          {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground" /> : <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+        </div>
+      </button>
+    </div>
   );
 }
 
 /* ── Compact 2-row mobile-friendly item row ──────────────── */
-function ItemRow({ item, isLast, onUpdate, onDelete, onEnterLast, lastRef, globalMarkupValue, useGlobalMarkup, onResetToGlobal }: {
-  item: LineItem; isLast: boolean;
+function ItemRow({ item, section, companyId, isLast, onUpdate, onDelete, onEnterLast, lastRef, globalMarkupValue, useGlobalMarkup, onResetToGlobal }: {
+  item: LineItem; section: Section; companyId: string | null; isLast: boolean;
   onUpdate: (id: string, field: keyof LineItem, value: string | number) => void;
   onDelete: (id: string) => void; onEnterLast: () => void;
   lastRef: React.RefObject<HTMLInputElement>;
@@ -85,6 +99,19 @@ function ItemRow({ item, isLast, onUpdate, onDelete, onEnterLast, lastRef, globa
       <div className="flex items-center gap-1.5">
         <Input className="flex-1 h-8 text-sm" value={item.name} placeholder="Item name" onChange={(e) => onUpdate(item.id, "name", e.target.value)} onKeyDown={handleKeyDown} ref={isLast ? lastRef : undefined} />
         <span className="text-sm font-bold whitespace-nowrap min-w-[60px] text-right">${lineTotal.toFixed(2)}</span>
+        {item.name.trim() && (
+          <button
+            type="button"
+            onClick={() => {
+              saveQuoteFavorite(companyId, { name: item.name.trim(), section, unitPrice: item.unitPrice, unit: section === "labour" ? "hr" : "ea" });
+              toast({ title: "Saved to favorites", description: "Shows in the add palette for this device." });
+            }}
+            className="shrink-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-primary"
+            title="Save to favorites"
+          >
+            <Star className="w-3.5 h-3.5" />
+          </button>
+        )}
         <button onClick={() => onDelete(item.id)} className="shrink-0 p-1 opacity-0 group-hover:opacity-100 transition-opacity text-muted-foreground hover:text-destructive"><X className="w-3.5 h-3.5" /></button>
       </div>
       {/* Row 2: Qty × Buy | Markup% */}
@@ -102,22 +129,23 @@ function ItemRow({ item, isLast, onUpdate, onDelete, onEnterLast, lastRef, globa
 }
 
 /* ── Block section (labour/materials/extras within a block) ── */
-function BlockSection({ label, items, section, isOpen, onToggle, onUpdate, onDelete, onAddBlank, onOpenPalette, lastRef, globalMarkupValue, useGlobalMarkup, onResetToGlobal }: {
+function BlockSection({ label, items, section, isOpen, onToggle, onUpdate, onDelete, onAddBlank, onOpenPalette, lastRef, globalMarkupValue, useGlobalMarkup, onResetToGlobal, companyId }: {
   label: string; items: LineItem[]; section: Section; isOpen: boolean; onToggle: () => void;
   onUpdate: (id: string, field: keyof LineItem, value: string | number) => void;
   onDelete: (id: string) => void; onAddBlank: () => void; onOpenPalette: () => void;
   lastRef: React.RefObject<HTMLInputElement>;
   globalMarkupValue: number; useGlobalMarkup: boolean; onResetToGlobal: (id: string) => void;
+  companyId: string | null;
 }) {
   const total = items.reduce((s, i) => s + i.qty * i.sellPrice, 0);
   return (
     <div>
-      <SectionHeader label={label} total={total} isOpen={isOpen} onToggle={onToggle} />
+      <SectionHeader label={label} total={total} isOpen={isOpen} onToggle={onToggle} onAdd={onOpenPalette} />
       <Collapsible open={isOpen}>
         <CollapsibleContent>
           <div className="space-y-1 mt-1">
             {items.map((item, idx) => (
-              <ItemRow key={item.id} item={item} isLast={idx === items.length - 1} onUpdate={onUpdate} onDelete={onDelete} onEnterLast={onAddBlank} lastRef={lastRef} globalMarkupValue={globalMarkupValue} useGlobalMarkup={useGlobalMarkup} onResetToGlobal={onResetToGlobal} />
+              <ItemRow key={item.id} item={item} section={section} companyId={companyId} isLast={idx === items.length - 1} onUpdate={onUpdate} onDelete={onDelete} onEnterLast={onAddBlank} lastRef={lastRef} globalMarkupValue={globalMarkupValue} useGlobalMarkup={useGlobalMarkup} onResetToGlobal={onResetToGlobal} />
             ))}
           </div>
           <Button variant="ghost" size="sm" className="gap-1 text-muted-foreground mt-1" onClick={onOpenPalette}><Plus className="w-4 h-4" /> Add</Button>
@@ -129,6 +157,10 @@ function BlockSection({ label, items, section, isOpen, onToggle, onUpdate, onDel
 
 /* ── Main QuoteTab ──────────────────────────────────────── */
 export function QuoteTab({ job, initialBundle, initialDescription, beforeActions, onSendQuote }: QuoteTabProps) {
+  const { materials, usingProdData } = useDemoData();
+  const { companyId } = useUserSettings();
+  const bundleOptions = usingProdData ? [] : bundleTemplates;
+
   const mkItem = (name: string, qty: number, unitPrice: number): LineItem => ({
     id: genId(), name, qty, unitPrice, sellPrice: unitPrice, markup: 0,
   });
@@ -150,7 +182,18 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
   };
 
   const createBlockFromJob = (): QuoteBlock => {
-    // Map staff names to roles using staffPool
+    if (usingProdData) {
+      return {
+        id: blockId(),
+        name: job.jobName || "Job",
+        description: job.description || "",
+        qty: 1,
+        labour: job.timeEntries.map((t) => mkItem(t.staff, t.hours, HOURLY_RATE)),
+        materials: job.materials.map((m) => mkItem(m.name, m.quantity, m.unitPrice)),
+        extras: [],
+      };
+    }
+
     const staffRoleMap: Record<string, string> = {};
     const staffPool = [
       { name: "Jake Turner", role: "Lead Sparky" },
@@ -161,7 +204,6 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
     ];
     staffPool.forEach((s) => { staffRoleMap[s.name] = s.role; });
 
-    // Aggregate hours by role
     const roleHours: Record<string, number> = {};
     job.timeEntries.forEach((t) => {
       const role = staffRoleMap[t.staff] || t.staff;
@@ -183,13 +225,16 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
     id: blockId(), name: "", description: "", qty: 1, labour: [], materials: [], extras: [],
   });
 
-  const initialBlocks: QuoteBlock[] = initialBundle
-    ? [createBlockFromBundle(initialBundle)]
-    : (job.timeEntries.length > 0 || job.materials.length > 0)
-      ? [createBlockFromJob()]
-      : [{ id: blockId(), name: initialDescription ? "Custom Job" : "", description: initialDescription || "", qty: 1, labour: [], materials: [], extras: [] }];
+  const initialBlocks = useMemo((): QuoteBlock[] => {
+    if (initialBundle) return [createBlockFromBundle(initialBundle)];
+    if (job.timeEntries.length > 0 || job.materials.length > 0) {
+      return [createBlockFromJob()];
+    }
+    return [{ id: blockId(), name: initialDescription ? "Custom Job" : "", description: initialDescription || "", qty: 1, labour: [], materials: [], extras: [] }];
+  }, [initialBundle, initialDescription, job, usingProdData]);
 
-  const [blocks, setBlocks] = useState<QuoteBlock[]>(initialBlocks);
+  const [blocks, setBlocks] = useState<QuoteBlock[]>(() => initialBlocks);
+  const [descUnlocked, setDescUnlocked] = useState<Record<string, boolean>>({});
   const [notes, setNotes] = useState("");
   const [notesOpen, setNotesOpen] = useState(false);
   const [coverLetterOpen, setCoverLetterOpen] = useState(false);
@@ -234,7 +279,8 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
 
   const lastInputRef = useRef<HTMLInputElement>(null);
 
-  const { materials, usingProdData } = useDemoData();
+  const paletteFavorites = useMemo(() => loadQuoteFavorites(companyId), [companyId, paletteOpen]);
+
   const catalogueItems = useMemo((): CatalogueItem[] => {
     if (!usingProdData) return staticCatalogueItems;
     const prodMaterials: CatalogueItem[] = materials.map((m) => ({
@@ -327,7 +373,7 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
 
   const confirmBundleAdd = useCallback(() => {
     if (!selectedBundleId) return;
-    const bundle = bundleTemplates.find((b) => b.id === selectedBundleId);
+    const bundle = bundleOptions.find((b) => b.id === selectedBundleId);
     if (!bundle) return;
     const markup = useGlobalMarkup ? globalMarkupValue : 0;
     const newBlock = createBlockFromBundle(bundle, bundleQty, markup);
@@ -335,7 +381,7 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
     setOpenSections((prev) => ({ ...prev, [newBlock.id]: { labour: true, materials: true, extras: newBlock.extras.length > 0 } }));
     setBundleDialogOpen(false);
     toast({ title: `${bundle.name} ×${bundleQty} added` });
-  }, [selectedBundleId, bundleQty, useGlobalMarkup, globalMarkupValue]);
+  }, [selectedBundleId, bundleQty, useGlobalMarkup, globalMarkupValue, bundleOptions]);
 
   const addCustomBlock = () => {
     const newBlock = createEmptyBlock();
@@ -389,17 +435,21 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
           <p className="text-sm text-muted-foreground">No jobs added yet. Add a bundle or custom job to start building your quote.</p>
           <div className="flex gap-2 justify-center flex-wrap">
             <Button variant="outline" size="sm" onClick={addCustomBlock} className="gap-1"><Plus className="w-4 h-4" /> Custom Job</Button>
-            <Select onValueChange={(val) => openBundleDialog(val)}>
-              <SelectTrigger className="h-9 w-auto min-w-[160px] text-sm gap-1">
-                <Package className="w-4 h-4 shrink-0" />
-                <SelectValue placeholder="Add Bundle" />
-              </SelectTrigger>
-              <SelectContent>
-                {bundleTemplates.map((b) => (
-                  <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {bundleOptions.length > 0 ? (
+              <Select onValueChange={(val) => openBundleDialog(val)}>
+                <SelectTrigger className="h-9 w-auto min-w-[160px] text-sm gap-1">
+                  <Package className="w-4 h-4 shrink-0" />
+                  <SelectValue placeholder="Add Bundle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bundleOptions.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-xs text-muted-foreground self-center">No saved bundles (demo bundles are off in production).</span>
+            )}
           </div>
         </div>
       )}
@@ -421,23 +471,35 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
                     placeholder="Job name — e.g. Install Heat Pump"
                     className="h-9 text-base font-bold border-0 bg-transparent px-0 focus-visible:ring-0"
                   />
-                  <Textarea
-                    value={block.description}
-                    onChange={(e) => {
-                      updateBlockField(block.id, "description", e.target.value);
-                      // Auto-resize
-                      e.target.style.height = "auto";
-                      e.target.style.height = e.target.scrollHeight + "px";
-                    }}
-                    ref={(el) => {
-                      if (el) {
-                        el.style.height = "auto";
-                        el.style.height = el.scrollHeight + "px";
-                      }
-                    }}
-                    placeholder="Describe scope of this job…"
-                    className="min-h-[80px] bg-muted/20 rounded-lg px-3 py-2 border border-border focus-visible:ring-1 focus-visible:ring-ring text-sm resize-none overflow-hidden"
-                  />
+                  <div className="flex gap-2 items-start">
+                    <Textarea
+                      value={block.description}
+                      onChange={(e) => {
+                        updateBlockField(block.id, "description", e.target.value);
+                        e.target.style.height = "auto";
+                        e.target.style.height = e.target.scrollHeight + "px";
+                      }}
+                      ref={(el) => {
+                        if (el) {
+                          el.style.height = "auto";
+                          el.style.height = el.scrollHeight + "px";
+                        }
+                      }}
+                      placeholder="Tap to type scope, or use the mic"
+                      readOnly={!descUnlocked[block.id]}
+                      onPointerDown={() => setDescUnlocked((p) => ({ ...p, [block.id]: true }))}
+                      onFocus={() => setDescUnlocked((p) => ({ ...p, [block.id]: true }))}
+                      className="min-h-[80px] flex-1 min-w-0 bg-muted/20 rounded-lg px-3 py-2 border border-border focus-visible:ring-1 focus-visible:ring-ring text-sm resize-none overflow-hidden"
+                    />
+                    <VoiceInputButton
+                      className="h-10 w-10 shrink-0 mt-0.5"
+                      onTranscript={(t) => {
+                        setDescUnlocked((p) => ({ ...p, [block.id]: true }));
+                        const prev = (block.description ?? "").trim();
+                        updateBlockField(block.id, "description", prev ? `${prev} ${t}` : t);
+                      }}
+                    />
+                  </div>
                 </div>
                 <div className="flex items-center gap-1 shrink-0 mt-1">
                   {block.qty > 1 && (
@@ -448,9 +510,9 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
               </div>
 
               {/* Labour / Materials / Extras sections */}
-              <BlockSection label="Labour" items={block.labour} section="labour" isOpen={sections.labour} onToggle={() => toggleSection(block.id, "labour")} onUpdate={updateItem(block.id, "labour")} onDelete={deleteItem(block.id, "labour")} onAddBlank={() => addBlankTo(block.id, "labour")} onOpenPalette={() => { setPaletteBlockId(block.id); setPaletteSection("labour"); setPaletteOpen(true); }} lastRef={lastInputRef} globalMarkupValue={globalMarkupValue} useGlobalMarkup={useGlobalMarkup} onResetToGlobal={resetToGlobal(block.id, "labour")} />
-              <BlockSection label="Materials" items={block.materials} section="materials" isOpen={sections.materials} onToggle={() => toggleSection(block.id, "materials")} onUpdate={updateItem(block.id, "materials")} onDelete={deleteItem(block.id, "materials")} onAddBlank={() => addBlankTo(block.id, "materials")} onOpenPalette={() => { setPaletteBlockId(block.id); setPaletteSection("materials"); setPaletteOpen(true); }} lastRef={lastInputRef} globalMarkupValue={globalMarkupValue} useGlobalMarkup={useGlobalMarkup} onResetToGlobal={resetToGlobal(block.id, "materials")} />
-              <BlockSection label="Extras" items={block.extras} section="extras" isOpen={sections.extras} onToggle={() => toggleSection(block.id, "extras")} onUpdate={updateItem(block.id, "extras")} onDelete={deleteItem(block.id, "extras")} onAddBlank={() => addBlankTo(block.id, "extras")} onOpenPalette={() => { setPaletteBlockId(block.id); setPaletteSection("extras"); setPaletteOpen(true); }} lastRef={lastInputRef} globalMarkupValue={globalMarkupValue} useGlobalMarkup={useGlobalMarkup} onResetToGlobal={resetToGlobal(block.id, "extras")} />
+              <BlockSection label="Labour" items={block.labour} section="labour" isOpen={sections.labour} onToggle={() => toggleSection(block.id, "labour")} onUpdate={updateItem(block.id, "labour")} onDelete={deleteItem(block.id, "labour")} onAddBlank={() => addBlankTo(block.id, "labour")} onOpenPalette={() => { setPaletteBlockId(block.id); setPaletteSection("labour"); setPaletteOpen(true); }} lastRef={lastInputRef} globalMarkupValue={globalMarkupValue} useGlobalMarkup={useGlobalMarkup} onResetToGlobal={resetToGlobal(block.id, "labour")} companyId={companyId} />
+              <BlockSection label="Materials" items={block.materials} section="materials" isOpen={sections.materials} onToggle={() => toggleSection(block.id, "materials")} onUpdate={updateItem(block.id, "materials")} onDelete={deleteItem(block.id, "materials")} onAddBlank={() => addBlankTo(block.id, "materials")} onOpenPalette={() => { setPaletteBlockId(block.id); setPaletteSection("materials"); setPaletteOpen(true); }} lastRef={lastInputRef} globalMarkupValue={globalMarkupValue} useGlobalMarkup={useGlobalMarkup} onResetToGlobal={resetToGlobal(block.id, "materials")} companyId={companyId} />
+              <BlockSection label="Extras" items={block.extras} section="extras" isOpen={sections.extras} onToggle={() => toggleSection(block.id, "extras")} onUpdate={updateItem(block.id, "extras")} onDelete={deleteItem(block.id, "extras")} onAddBlank={() => addBlankTo(block.id, "extras")} onOpenPalette={() => { setPaletteBlockId(block.id); setPaletteSection("extras"); setPaletteOpen(true); }} lastRef={lastInputRef} globalMarkupValue={globalMarkupValue} useGlobalMarkup={useGlobalMarkup} onResetToGlobal={resetToGlobal(block.id, "extras")} companyId={companyId} />
 
               {/* Block subtotal */}
               <div className="flex justify-between items-center px-3 py-2 rounded-lg bg-muted/20 border border-border text-sm">
@@ -468,17 +530,21 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
           <p className="text-xs text-muted-foreground text-center">Add another job to this quote</p>
           <div className="flex gap-2 justify-center flex-wrap">
             <Button variant="outline" size="sm" onClick={addCustomBlock} className="gap-1"><Plus className="w-4 h-4" /> Custom Job</Button>
-            <Select onValueChange={(val) => openBundleDialog(val)}>
-              <SelectTrigger className="h-9 w-auto min-w-[160px] text-sm gap-1">
-                <Package className="w-4 h-4 shrink-0" />
-                <SelectValue placeholder="Add Bundle" />
-              </SelectTrigger>
-              <SelectContent>
-                {bundleTemplates.map((b) => (
-                  <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            {bundleOptions.length > 0 ? (
+              <Select onValueChange={(val) => openBundleDialog(val)}>
+                <SelectTrigger className="h-9 w-auto min-w-[160px] text-sm gap-1">
+                  <Package className="w-4 h-4 shrink-0" />
+                  <SelectValue placeholder="Add Bundle" />
+                </SelectTrigger>
+                <SelectContent>
+                  {bundleOptions.map((b) => (
+                    <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            ) : (
+              <span className="text-xs text-muted-foreground self-center">No saved bundles (demo bundles are off in production).</span>
+            )}
           </div>
         </div>
       )}
@@ -487,8 +553,8 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
       <Dialog open={bundleDialogOpen} onOpenChange={setBundleDialogOpen}>
         <DialogContent className="max-w-xs">
           <div className="space-y-4">
-            <h3 className="text-sm font-bold text-card-foreground">Add {bundleTemplates.find((b) => b.id === selectedBundleId)?.name}</h3>
-            <p className="text-xs text-muted-foreground">{bundleTemplates.find((b) => b.id === selectedBundleId)?.description}</p>
+            <h3 className="text-sm font-bold text-card-foreground">Add {bundleOptions.find((b) => b.id === selectedBundleId)?.name}</h3>
+            <p className="text-xs text-muted-foreground">{bundleOptions.find((b) => b.id === selectedBundleId)?.description}</p>
             <div className="flex items-center gap-3">
               <Label className="text-xs">Quantity</Label>
               <div className="flex items-center gap-1">
@@ -566,6 +632,33 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
               <CommandEmpty>
                 <button className="w-full text-left px-2 py-1.5 text-sm hover:bg-accent rounded-sm" onClick={() => { if (paletteBlockId) addBlankTo(paletteBlockId, paletteSection ?? "materials"); setPaletteOpen(false); setPaletteSection(null); setPaletteBlockId(null); }}>+ Add as custom item</button>
               </CommandEmpty>
+              {paletteFavorites.filter((f) => !paletteSection || f.section === paletteSection).length > 0 && (
+                <CommandGroup heading="Favorites">
+                  {paletteFavorites
+                    .filter((f) => !paletteSection || f.section === paletteSection)
+                    .map((f) => (
+                      <CommandItem
+                        key={f.id}
+                        onSelect={() =>
+                          addCatalogueItem({
+                            id: f.id,
+                            name: f.name,
+                            quantity: 1,
+                            unit: f.unit,
+                            unitPrice: f.unitPrice,
+                            supplier: "",
+                            section: f.section,
+                          })
+                        }
+                      >
+                        <div className="flex justify-between w-full gap-2">
+                          <span>{f.name}</span>
+                          <span className="text-muted-foreground text-xs">${f.unitPrice.toFixed(2)} / {f.unit}</span>
+                        </div>
+                      </CommandItem>
+                    ))}
+                </CommandGroup>
+              )}
               {(!paletteSection || paletteSection === "labour") && labourCatalogue.length > 0 && (
                 <CommandGroup heading="Labour">{labourCatalogue.map((m) => <CommandItem key={m.id} onSelect={() => addCatalogueItem(m)}><div className="flex justify-between w-full"><span>{m.name}</span><span className="text-muted-foreground text-xs">${m.unitPrice.toFixed(2)} / {m.unit}</span></div></CommandItem>)}</CommandGroup>
               )}

@@ -12,6 +12,7 @@ import { NotificationStyleSettings } from "@/components/NotificationStyleSetting
 import { useJobPrefix } from "@/contexts/JobPrefixContext";
 import { useDemoData } from "@/contexts/DemoDataContext";
 import { toast } from "@/hooks/use-toast";
+import { BusinessProfileForm } from "@/components/settings/BusinessProfileForm";
 
 type SettingsTab = "business" | "notifications" | "appearance" | "billing" | "team" | "integrations" | "documents";
 
@@ -25,21 +26,7 @@ function SettingsContent({ tab }: { tab: SettingsTab }) {
     business: (
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-card-foreground">Business Profile</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-          {[
-            ["Business Name", "Thompson Plumbing & Electrical"],
-            ["ABN / NZBN", "12-345-678-901"],
-            ["Phone", "0800 TOOLBELT"],
-            ["Email", "admin@toolbelt.co.nz"],
-            ["Address", "42 Trade Ave, Auckland 1010"],
-            ["Website", "www.toolbelt.co.nz"],
-          ].map(([label, value]) => (
-            <div key={label} className="p-3 rounded-lg bg-card border border-border">
-              <div className="text-xs text-muted-foreground">{label}</div>
-              <div className="text-sm font-medium text-card-foreground mt-0.5">{value}</div>
-            </div>
-          ))}
-        </div>
+        <BusinessProfileForm />
 
         <h3 className="text-sm font-semibold text-card-foreground pt-4">Job Numbering</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

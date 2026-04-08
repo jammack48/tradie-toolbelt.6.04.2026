@@ -95,7 +95,7 @@ export function TimeGrid3Day({ dates, staffFilter, selectedDate, onSwipe, jobs: 
       const dayJobs = jobs.filter(j => j.dayOffset === dayOffset);
       return computeOverlapLayout(dayJobs);
     });
-  }, [dates, staffFilter, externalJobs]);
+  }, [dates, staffFilter, externalJobs, trade]);
 
   const visibleJobIds = useMemo(
     () => [...new Set(dayLayouts.flatMap((layout) => layout.map(({ job }) => job.id)))],

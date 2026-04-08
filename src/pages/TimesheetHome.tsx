@@ -5,13 +5,16 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { DayStrip } from "@/components/schedule/DayStrip";
 import { DayViewToggle } from "@/components/schedule/DayViewToggle";
 import { TimeGrid3Day } from "@/components/schedule/TimeGrid3Day";
-import { generateWeekJobs } from "@/components/schedule/scheduleData";
 import { cn } from "@/lib/utils";
-
-const CURRENT_WORKER = "Dave";
+import { useDemoData } from "@/contexts/DemoDataContext";
+import { useUserSettings } from "@/contexts/UserSettingsContext";
+import { parseBusinessProfile, toolsGreetingLabel } from "@/lib/businessProfile";
 
 export default function TimesheetHome() {
   const isMobile = useIsMobile();
+  const { usingProdData } = useDemoData();
+  const { settings } = useUserSettings();
+  const greeting = toolsGreetingLabel(parseBusinessProfile(settings?.business_profile));
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [viewDays, setViewDays] = useState<1 | 3 | 5>(3);
   const [selectedDay, setSelectedDay] = useState(() => {
@@ -51,7 +54,7 @@ export default function TimesheetHome() {
       <div className={cn("shrink-0 space-y-3", isMobile ? "px-3 pt-4" : "")}>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-foreground">G'day, {CURRENT_WORKER} 👋</h2>
+            <h2 className="text-lg font-bold text-foreground">G&apos;day, {greeting} 👋</h2>
             <p className="text-sm text-muted-foreground">
               {format(weekStart, "d MMM")} – {format(addDays(weekStart, 6), "d MMM")}
               {isToday(selectedDate) ? " — Today" : ""}
@@ -80,7 +83,8 @@ export default function TimesheetHome() {
       )}>
         <TimeGrid3Day
           dates={visibleDates}
-          staffFilter={CURRENT_WORKER}
+          jobs={usingProdData ? [] : undefined}
+          staffFilter={usingProdData ? undefined : "Dave"}
           selectedDate={selectedDate}
           onSwipe={handleSwipe}
         />

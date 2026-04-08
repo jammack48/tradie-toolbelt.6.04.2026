@@ -7,6 +7,9 @@ import { DayStrip } from "@/components/schedule/DayStrip";
 import { DayViewToggle } from "@/components/schedule/DayViewToggle";
 import { TimeGrid3Day } from "@/components/schedule/TimeGrid3Day";
 import { generateWeekJobs } from "@/components/schedule/scheduleData";
+import { useDemoData } from "@/contexts/DemoDataContext";
+import { useUserSettings } from "@/contexts/UserSettingsContext";
+import { parseBusinessProfile, toolsGreetingLabel } from "@/lib/businessProfile";
 import { Package, ChevronUp, ChevronDown, Plus, Zap, FileText } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -51,12 +54,16 @@ function FABMenu() {
   );
 }
 
-const CURRENT_STAFF = "Dave";
+/** Demo schedule rows tagged for this worker — not used when logged in with production data. */
+const DEMO_STAFF_FILTER = "Dave";
 
 export default function WorkHome() {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const { trade } = useAppMode();
+  const { usingProdData } = useDemoData();
+  const { settings } = useUserSettings();
+  const greeting = toolsGreetingLabel(parseBusinessProfile(settings?.business_profile));
   const [materialsOpen, setMaterialsOpen] = useState(false);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date(), { weekStartsOn: 1 }));
   const [viewDays, setViewDays] = useState<1 | 3 | 5>(3);
@@ -77,10 +84,9 @@ export default function WorkHome() {
     return Array.from({ length: viewDays }, (_, i) => addDays(selectedDate, i - offset));
   }, [selectedDate, viewDays]);
 
-  // Filter to only current staff's jobs
-  const weekJobs = useMemo(() => generateWeekJobs(weekStart, trade), [weekStart, trade]);
+  const weekJobs = useMemo(() => (usingProdData ? [] : generateWeekJobs(weekStart, trade)), [usingProdData, weekStart, trade]);
   const myJobs = useMemo(
-    () => weekJobs.filter((j) => j.assignedTo === CURRENT_STAFF),
+    () => weekJobs.filter((j) => j.assignedTo === DEMO_STAFF_FILTER),
     [weekJobs]
   );
 
@@ -123,7 +129,7 @@ export default function WorkHome() {
       <div className={cn("shrink-0 space-y-3", isMobile ? "px-3 pt-4" : "") }>
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-foreground">G'day, {CURRENT_STAFF} 👋</h2>
+            <h2 className="text-lg font-bold text-foreground">G&apos;day, {greeting} 👋</h2>
             <p className="text-sm text-muted-foreground">
               {format(weekStart, "d MMM")} – {format(addDays(weekStart, 6), "d MMM")}
               {isToday(selectedDate) ? " — Today" : ""}
@@ -183,7 +189,8 @@ export default function WorkHome() {
       )}>
         <TimeGrid3Day
           dates={visibleDates}
-          staffFilter={CURRENT_STAFF}
+          jobs={usingProdData ? [] : undefined}
+          staffFilter={usingProdData ? undefined : DEMO_STAFF_FILTER}
           selectedDate={selectedDate}
           onSwipe={handleSwipe}
         />

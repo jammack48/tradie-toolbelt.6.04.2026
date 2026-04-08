@@ -9,6 +9,7 @@ import { Command, CommandInput, CommandList, CommandItem, CommandEmpty, CommandG
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import type { DemoCustomer } from "@/types/demoData";
 import { formatCustomerAddressSubtitle } from "@/lib/customerAddress";
+import { VoiceInputButton } from "@/components/VoiceInputButton";
 
 export interface FunnelResult {
   customer: DemoCustomer | null;
@@ -88,7 +89,6 @@ function StepCustomer({ onSelect, onSkip, label = "quote", customers }: { onSele
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search customers…"
           className="pl-10 h-12"
-          autoFocus
         />
       </div>
 
@@ -165,7 +165,6 @@ function StepAddress({
         onChange={(e) => onAddressChange(e.target.value)}
         placeholder="Enter site address…"
         className="h-12"
-        autoFocus
       />
 
       {customer && primary ? (
@@ -199,25 +198,32 @@ function StepAddress({
 }
 
 /* ── Bundle Search Dropdown ─────────────────────────────── */
-function BundleSearchDropdown({ onSelect }: { onSelect: (b: BundleTemplate) => void }) {
+function BundleSearchDropdown({ bundles, onSelect }: { bundles: BundleTemplate[]; onSelect: (b: BundleTemplate) => void }) {
   const [active, setActive] = useState(false);
   const [search, setSearch] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return bundleTemplates;
+    if (!search.trim()) return bundles;
     const q = search.toLowerCase();
-    return bundleTemplates.filter(b => b.name.toLowerCase().includes(q) || b.description.toLowerCase().includes(q));
-  }, [search]);
+    return bundles.filter((b) => b.name.toLowerCase().includes(q) || b.description.toLowerCase().includes(q));
+  }, [bundles, search]);
 
   useEffect(() => {
-    if (active && inputRef.current) {
-      inputRef.current.focus();
-      // Scroll container into view so keyboard doesn't hide it
+    if (active && bundles.length > 0) {
+      // Scroll into view without forcing focus — avoids mobile keyboard covering the list until user taps search.
       setTimeout(() => containerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 150);
     }
-  }, [active]);
+  }, [active, bundles.length]);
+
+  if (bundles.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-muted/30 px-3 py-4 text-center text-sm text-muted-foreground">
+        No bundles in your library yet. Use <span className="font-medium text-foreground">Custom Job</span> above.
+      </div>
+    );
+  }
 
   if (!active) {
     return (
@@ -245,6 +251,7 @@ function BundleSearchDropdown({ onSelect }: { onSelect: (b: BundleTemplate) => v
           onChange={e => setSearch(e.target.value)}
           placeholder="Search bundles…"
           className="flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+          autoComplete="off"
         />
         <button onClick={() => { setActive(false); setSearch(""); }} className="text-muted-foreground hover:text-foreground cursor-pointer">
           <X className="w-4 h-4" />
@@ -283,16 +290,23 @@ function BundleSearchDropdown({ onSelect }: { onSelect: (b: BundleTemplate) => v
 
 /* ── Step 3: Bundle or Custom ──────────────────────────── */
 function StepBundle({
+  bundles,
   onSelectBundle,
   onCustom,
   onBack,
 }: {
+  bundles: BundleTemplate[];
   onSelectBundle: (b: BundleTemplate) => void;
   onCustom: (desc: string) => void;
   onBack: () => void;
 }) {
   const [customDesc, setCustomDesc] = useState("");
   const [showCustom, setShowCustom] = useState(false);
+  const [descUnlocked, setDescUnlocked] = useState(false);
+
+  useEffect(() => {
+    if (showCustom) setDescUnlocked(false);
+  }, [showCustom]);
 
   return (
     <div className="space-y-4">
@@ -324,13 +338,28 @@ function StepBundle({
             </Button>
           ) : (
             <div className="mt-3 space-y-3">
-              <Textarea
-                value={customDesc}
-                onChange={(e) => setCustomDesc(e.target.value)}
-                placeholder="Describe the work — e.g. 'Replace hot water cylinder and reroute pipework in ground floor bathroom'"
-                className="min-h-[80px]"
-                autoFocus
-              />
+              <div className="flex gap-2 items-start">
+                <Textarea
+                  value={customDesc}
+                  onChange={(e) => setCustomDesc(e.target.value)}
+                  placeholder="Describe the work — tap to type, or use the mic"
+                  className="min-h-[80px] flex-1 min-w-0"
+                  readOnly={!descUnlocked}
+                  onPointerDown={() => setDescUnlocked(true)}
+                  onFocus={() => setDescUnlocked(true)}
+                  inputMode="text"
+                />
+                <VoiceInputButton
+                  className="h-10 w-10 shrink-0 mt-0.5"
+                  onTranscript={(t) => {
+                    setDescUnlocked(true);
+                    setCustomDesc((prev) => {
+                      const p = prev.trim();
+                      return p ? `${p} ${t}` : t;
+                    });
+                  }}
+                />
+              </div>
               <Button
                 className="w-full h-12"
                 disabled={!customDesc.trim()}
@@ -343,14 +372,16 @@ function StepBundle({
         </div>
 
         {/* Divider */}
-        <div className="flex items-center gap-3 py-1">
-          <div className="flex-1 h-px bg-border" />
-          <span className="text-xs text-muted-foreground font-medium">or choose a bundle</span>
-          <div className="flex-1 h-px bg-border" />
-        </div>
+        {bundles.length > 0 && (
+          <div className="flex items-center gap-3 py-1">
+            <div className="flex-1 h-px bg-border" />
+            <span className="text-xs text-muted-foreground font-medium">or choose a bundle</span>
+            <div className="flex-1 h-px bg-border" />
+          </div>
+        )}
 
         {/* Searchable bundle dropdown */}
-        <BundleSearchDropdown onSelect={onSelectBundle} />
+        <BundleSearchDropdown bundles={bundles} onSelect={onSelectBundle} />
       </div>
     </div>
   );
@@ -358,7 +389,8 @@ function StepBundle({
 
 /* ── Main Funnel (pure content, no page shell) ─────────── */
 export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initialCustomer }: QuoteFunnelProps) {
-  const { customers } = useDemoData();
+  const { customers, usingProdData } = useDemoData();
+  const demoBundles = usingProdData ? [] : bundleTemplates;
   const startStep = initialCustomer ? 2 : 1;
   const [step, _setStep] = useState(startStep);
   const setStep = (s: number) => { _setStep(s); onStepChange?.(s); };
@@ -408,6 +440,7 @@ export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initial
       )}
       {step === 3 && (
         <StepBundle
+          bundles={demoBundles}
           onSelectBundle={handleSelectBundle}
           onCustom={handleCustomDescription}
           onBack={() => setStep(2)}

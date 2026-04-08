@@ -93,7 +93,6 @@ function CustomerPicker({
               onChange={e => setCustomer(e.target.value)}
               placeholder="Customer name"
               className="h-12"
-              autoFocus
             />
             <button
               onClick={() => { setIsNewCustomer(false); setSearch(""); }}
@@ -112,7 +111,6 @@ function CustomerPicker({
                 onFocus={() => setShowDropdown(true)}
                 placeholder="Search customers…"
                 className="h-12 pl-9"
-                autoFocus
               />
             </div>
             {showDropdown && (

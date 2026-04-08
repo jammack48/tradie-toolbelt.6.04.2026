@@ -338,7 +338,13 @@ export default function QuotePage() {
     messages: <MessagesTab recordType="quote" recordId={job.id} showPipelineLink pipelinePath="/" />,
     "line-items": (
       <div className="space-y-4">
-        <QuoteTab job={job} onSendQuote={handleSendQuote} initialBundle={funnelData?.bundle || undefined} initialDescription={funnelData?.description || undefined} beforeActions={
+        <QuoteTab
+          key={isNew ? `new-quote-${funnelComplete ? "open" : "funnel"}` : job.id}
+          job={job}
+          onSendQuote={handleSendQuote}
+          initialBundle={funnelData?.bundle || undefined}
+          initialDescription={funnelData?.description || undefined}
+          beforeActions={
           <SequenceSelector category="quotes" selectedId={selectedSequenceId} onSelect={setSelectedSequenceId} />
         } />
       </div>
