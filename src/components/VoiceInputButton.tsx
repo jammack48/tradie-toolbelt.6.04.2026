@@ -55,7 +55,7 @@ export function VoiceInputButton({
     }
 
     const rec = new SR();
-    rec.lang = "en-NZ";
+    rec.lang = navigator.language?.startsWith("en") ? navigator.language : "en-NZ";
     rec.interimResults = false;
     rec.continuous = false;
     recRef.current = rec;

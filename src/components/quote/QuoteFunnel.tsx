@@ -81,6 +81,12 @@ function QuickAiCapture({
   const [photos, setPhotos] = useState<File[]>([]);
   const recRef = useRef<SpeechRecognition | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const transcriptRef = useRef("");
+  const transcriptBaseRef = useRef("");
+
+  useEffect(() => {
+    transcriptRef.current = transcript;
+  }, [transcript]);
 
   const stop = () => {
     try {
@@ -99,28 +105,44 @@ function QuickAiCapture({
       toast({ title: "Voice unavailable", description: "Use Chrome/Edge with microphone permissions.", variant: "destructive" });
       return;
     }
+    transcriptBaseRef.current = transcriptRef.current.trim();
     const rec = new SR();
-    rec.lang = "en-NZ";
+    rec.lang = navigator.language?.startsWith("en") ? navigator.language : "en-NZ";
+    rec.maxAlternatives = 1;
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (ev: SpeechRecognitionEvent) => {
-      let final = "";
-      let interim = "";
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const t = ev.results[i]?.[0]?.transcript ?? "";
-        if (ev.results[i].isFinal) final += `${t} `;
-        else interim += `${t} `;
+      const finalParts: string[] = [];
+      const interimParts: string[] = [];
+      for (let i = 0; i < ev.results.length; i++) {
+        const chunk = ev.results[i]?.[0]?.transcript?.trim() ?? "";
+        if (!chunk) continue;
+        if (ev.results[i].isFinal) {
+          finalParts.push(chunk);
+        } else {
+          interimParts.push(chunk);
+        }
       }
-      setTranscript((prev) => `${prev}${final}`.trim() + (interim ? ` ${interim}` : ""));
+      const recognized = [...finalParts, ...interimParts].join(" ").trim();
+      const base = transcriptBaseRef.current;
+      setTranscript([base, recognized].filter(Boolean).join(" ").trim());
     };
     rec.onerror = () => {
       toast({ title: "Mic error", description: "Check microphone permission.", variant: "destructive" });
       stop();
     };
-    rec.onend = () => setRecording(false);
+    rec.onend = () => {
+      recRef.current = null;
+      setRecording(false);
+    };
     recRef.current = rec;
-    rec.start();
-    setRecording(true);
+    try {
+      rec.start();
+      setRecording(true);
+    } catch {
+      toast({ title: "Could not start microphone", variant: "destructive" });
+      stop();
+    }
   };
 
   const apply = async () => {

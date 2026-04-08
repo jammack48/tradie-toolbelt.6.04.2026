@@ -20,6 +20,8 @@ interface BackendContextValue {
   connected: boolean | null;
   dbConnected: boolean | null;
   dbStatus: string | null;
+  aiConnected: boolean | null;
+  aiStatus: string | null;
   debug: DebugInfo | null;
   enabled: boolean;
   logs: LogEntry[];
@@ -35,6 +37,8 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
   const [connected, setConnected] = useState<boolean | null>(null);
   const [dbConnected, setDbConnected] = useState<boolean | null>(null);
   const [dbStatus, setDbStatus] = useState<string | null>(null);
+  const [aiConnected, setAiConnected] = useState<boolean | null>(null);
+  const [aiStatus, setAiStatus] = useState<string | null>(null);
   const [debug, setDebug] = useState<DebugInfo | null>(null);
   const [enabled, setEnabled] = useState(true);
   const [logs, setLogs] = useState<LogEntry[]>([]);
@@ -52,23 +56,30 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
         const data = await res.json();
         setConnected(true);
         const db = typeof data.db === "string" ? data.db : "not_reported";
+        const ai = typeof data.ai === "string" ? data.ai : "unknown";
         setDbStatus(db);
+        setAiStatus(ai);
         setDbConnected(db === "connected");
+        setAiConnected(ai === "online");
         if (data.debug) setDebug(data.debug);
 
         const debugMsg = data.debug?.init_error || data.debug?.query_error;
         const suffix = debugMsg ? ` — ${debugMsg}` : "";
-        addLog(`Health OK • DB: ${db}${suffix}`, db === "connected");
+        addLog(`Health OK • DB: ${db} • AI: ${ai}${suffix}`, db === "connected" && ai === "online");
       } else {
         setConnected(false);
         setDbConnected(null);
         setDbStatus(null);
+        setAiConnected(null);
+        setAiStatus(null);
         addLog(`Health check failed (${res.status})`, false);
       }
     } catch {
       setConnected(false);
       setDbConnected(null);
       setDbStatus(null);
+      setAiConnected(null);
+      setAiStatus(null);
       addLog("Server unreachable", false);
     }
   }, [addLog]);
@@ -78,6 +89,8 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
       setConnected(false);
       setDbConnected(null);
       setDbStatus(null);
+      setAiConnected(null);
+      setAiStatus(null);
       addLog("Disconnected by user", false);
       if (intervalRef.current) clearInterval(intervalRef.current);
       return;
@@ -94,11 +107,7 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
   const toggleEnabled = useCallback(() => setEnabled((e) => !e), []);
   const clearLogs = useCallback(() => setLogs([]), []);
 
-  return (
-    <Ctx.Provider value={{ connected, dbConnected, dbStatus, debug, enabled, logs, panelOpen, setPanelOpen, toggleEnabled, clearLogs }}>
-      {children}
-    </Ctx.Provider>
-  );
+  return <Ctx.Provider value={{ connected, dbConnected, dbStatus, aiConnected, aiStatus, debug, enabled, logs, panelOpen, setPanelOpen, toggleEnabled, clearLogs }}>{children}</Ctx.Provider>;
 }
 
 export function useBackend() {

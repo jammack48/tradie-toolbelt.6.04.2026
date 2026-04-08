@@ -49,6 +49,7 @@ import InvoicePage from "./pages/InvoicePage";
 
 import NotFound from "./pages/NotFound";
 import { cn } from "@/lib/utils";
+import { useIsMobile } from "@/hooks/use-mobile";
 import LoginPage from "./pages/LoginPage";
 import { resolveLandingPath } from "@/lib/navigation/resolveLanding";
 import EntryPage from "./pages/EntryPage";
@@ -59,8 +60,11 @@ const queryClient = new QueryClient();
 function AppLayout() {
   const { mode, trade, isWorkMode, isTimesheetOnlyMode, isIntroMode, clearMode, clearTrade } = useAppMode();
   const { position } = useToolbarPosition();
+  const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
+  const effectiveToolbarPosition =
+    isWorkMode && isMobile && (position === "left" || position === "right") ? "bottom" : position;
 
   type EntryStep = "entry" | "login" | "post_login_workspace" | "trade" | "mode" | "ready";
   const [entryStep, setEntryStep] = useState<EntryStep>(() => (mode && trade ? "ready" : "entry"));
@@ -150,10 +154,10 @@ function AppLayout() {
       <AppHeader />
       <div
         className={cn(
-          isWorkMode && position === "bottom" && "pb-16",
-          isWorkMode && position === "top" && "pt-14",
-          isWorkMode && position === "left" && "pl-16",
-          isWorkMode && position === "right" && "pr-16"
+          isWorkMode && effectiveToolbarPosition === "bottom" && "pb-16",
+          isWorkMode && effectiveToolbarPosition === "top" && "pt-14",
+          isWorkMode && effectiveToolbarPosition === "left" && "pl-16",
+          isWorkMode && effectiveToolbarPosition === "right" && "pr-16"
         )}
       >
         <Routes>

@@ -1,7 +1,6 @@
 import { cn } from "@/lib/utils";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useToolbarPosition } from "@/contexts/ToolbarPositionContext";
-import { useAppMode } from "@/contexts/AppModeContext";
 import { useTutorial } from "@/contexts/TutorialContext";
 import { sidebarTooltips } from "@/data/tutorialContent";
 import { TutorialBanner } from "@/components/TutorialBanner";
@@ -33,9 +32,8 @@ interface PageToolbarProps {
 export function PageToolbar({ tabs, activeTab, onTabChange, children, pageHeading, currentPage, highlightedTabs = [], tutorialKey }: PageToolbarProps) {
   const isMobile = useIsMobile();
   const { position: rawPosition } = useToolbarPosition();
-  const { isWorkMode } = useAppMode();
-  // Force top position on mobile to prevent sidebar from compressing content
-  const position = isWorkMode && rawPosition === "bottom" ? "top" : rawPosition;
+  // On mobile, always collapse side toolbars into a horizontal bar.
+  const position = isMobile && (rawPosition === "left" || rawPosition === "right") ? "bottom" : rawPosition;
   const { tutorialOn } = useTutorial();
 
   const tutorialBanner = tutorialOn ? <TutorialBanner overrideKey={tutorialKey} tabKey={activeTab} /> : null;

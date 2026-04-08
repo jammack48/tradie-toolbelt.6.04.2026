@@ -29,7 +29,20 @@ function DebugRow({ label, value, warn }: { label: string; value: string; warn?:
 }
 
 export function BackendLogPanel() {
-  const { panelOpen, setPanelOpen, logs, enabled, connected, dbConnected, dbStatus, debug, toggleEnabled, clearLogs } = useBackend();
+  const {
+    panelOpen,
+    setPanelOpen,
+    logs,
+    enabled,
+    connected,
+    dbConnected,
+    dbStatus,
+    aiConnected,
+    aiStatus,
+    debug,
+    toggleEnabled,
+    clearLogs,
+  } = useBackend();
 
   return (
     <Sheet open={panelOpen} onOpenChange={setPanelOpen}>
@@ -71,6 +84,17 @@ export function BackendLogPanel() {
                 : dbConnected === null
                   ? "DB not checked"
                   : "Database offline"}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <StatusDot state={aiConnected} />
+            <span className="text-xs text-foreground font-medium">
+              {aiStatus
+                ? `AI: ${aiStatus}`
+                : aiConnected === null
+                  ? "AI not checked"
+                  : "AI offline"}
             </span>
           </div>
         </div>
