@@ -32,10 +32,10 @@ export function AppHeader() {
   const { position, cyclePosition } = useToolbarPosition();
   const { userId, refresh } = useUserSettings();
   const { goToLogin, goToEntry } = useEntryFlowActions();
-
   const handleCycleToolbar = () => {
-    const next = getNextToolbarPosition(position);
-    cyclePosition();
+    const skipPositions = isMobile ? ["left", "right"] : undefined;
+    const next = getNextToolbarPosition(position, skipPositions);
+    cyclePosition(skipPositions);
     if (!userId) return;
     void (async () => {
       try {

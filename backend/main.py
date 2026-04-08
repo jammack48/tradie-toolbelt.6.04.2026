@@ -102,6 +102,20 @@ def _mask_key(key: str) -> str:
     return f"{key[:3]}...{key[-4:]}"
 
 
+def _ai_health_status() -> tuple[str, str | None]:
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        return "not_configured", None
+    try:
+        from openai import OpenAI
+
+        # Client init validates local SDK wiring (quick and no API request).
+        OpenAI(api_key=api_key)
+        return "online", None
+    except Exception as e:
+        return "offline", f"{type(e).__name__}: {str(e)[:200]}"
+
+
 def get_supabase():
     global _supabase, _init_error
     if _supabase is not None:
@@ -132,35 +146,38 @@ async def root():
 async def health_check():
     url = os.environ.get("SUPABASE_URL", "").strip()
     key = os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
+    ai_status, ai_error = _ai_health_status()
 
     debug = {
         "url_set": bool(url),
         "key_set": bool(key),
         "key_type": _detect_key_type(key) if key else "missing",
         "key_preview": _mask_key(key) if key else "n/a",
+        "ai_key_set": bool(os.environ.get("OPENAI_API_KEY", "").strip()),
+        "ai_error": ai_error,
         "init_error": None,
         "query_error": None,
     }
 
     if not url or not key:
         debug["init_error"] = "Missing env var(s)"
-        return {"status": "ok", "db": "not_configured", "debug": debug}
+        return {"status": "ok", "db": "not_configured", "ai": ai_status, "debug": debug}
 
     sb = get_supabase()
     if sb is None:
         debug["init_error"] = _init_error
-        return {"status": "ok", "db": "invalid_key", "debug": debug}
+        return {"status": "ok", "db": "invalid_key", "ai": ai_status, "debug": debug}
 
     try:
         sb.table("prod_user_settings").select("user_id").limit(1).execute()
-        return {"status": "ok", "db": "connected", "debug": debug}
+        return {"status": "ok", "db": "connected", "ai": ai_status, "debug": debug}
     except Exception as e:
         err = str(e)
         if "does not exist" in err or "42P01" in err:
             debug["query_error"] = "Table prod_user_settings not found (run migrations on this Supabase project)"
-            return {"status": "ok", "db": "schema_mismatch", "debug": debug}
+            return {"status": "ok", "db": "schema_mismatch", "ai": ai_status, "debug": debug}
         debug["query_error"] = f"{type(e).__name__}: {err[:200]}"
-        return {"status": "ok", "db": "query_failed", "debug": debug}
+        return {"status": "ok", "db": "query_failed", "ai": ai_status, "debug": debug}
 
 
 @app.post("/ai/quick-quote-extract")

@@ -4,6 +4,7 @@ import { cn } from "@/lib/utils";
 import { INITIAL_NOTES } from "@/data/dummyTeamChat";
 import { useAppMode } from "@/contexts/AppModeContext";
 import { useToolbarPosition } from "@/contexts/ToolbarPositionContext";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const NAV_ITEMS = [
   { id: "home", icon: Home, label: "Schedule", path: "/" },
@@ -34,9 +35,11 @@ export function WorkBottomNav() {
   const location = useLocation();
   const { isTimesheetOnlyMode, isIntroMode } = useAppMode();
   const { position } = useToolbarPosition();
+  const isMobile = useIsMobile();
   const urgentCount = getUrgentCount();
   const items = isTimesheetOnlyMode ? TIMESHEET_NAV_ITEMS : isIntroMode ? INTRO_NAV_ITEMS : NAV_ITEMS;
-  const isVertical = position === "left" || position === "right";
+  const effectivePosition = isMobile && (position === "left" || position === "right") ? "bottom" : position;
+  const isVertical = effectivePosition === "left" || effectivePosition === "right";
 
   return (
     <nav
@@ -45,10 +48,10 @@ export function WorkBottomNav() {
         isVertical
           ? "fixed top-12 bottom-0 w-16 border-r"
           : "fixed left-0 right-0 h-14 border-t safe-area-bottom",
-        position === "left" && "left-0",
-        position === "right" && "right-0 border-r-0 border-l",
-        position === "top" && "top-12",
-        position === "bottom" && "bottom-0"
+        effectivePosition === "left" && "left-0",
+        effectivePosition === "right" && "right-0 border-r-0 border-l",
+        effectivePosition === "top" && "top-12",
+        effectivePosition === "bottom" && "bottom-0"
       )}
     >
       <div
