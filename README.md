@@ -34,6 +34,8 @@ The FastAPI backend on Render requires these env vars:
 |----------|-------|---------------|
 | `SUPABASE_URL` | `https://qrkojbfayjrtrlrmgzry.supabase.co` | Supabase project URL |
 | `SUPABASE_SERVICE_KEY` | Legacy `service_role` JWT (starts with `eyJ...`) | Supabase Dashboard → Settings → API Keys → Legacy anon, service_role |
+| `OPENAI_API_KEY` | Your OpenAI project secret key | OpenAI dashboard |
+| `OPENAI_MODEL` *(optional)* | e.g. `gpt-4o-mini` | Backend model override |
 
 **Important**: Do NOT use the publishable/anon key. Do NOT use new-format keys starting with `sb_secret_...` — the current Python SDK requires the legacy JWT.
 

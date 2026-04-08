@@ -1,5 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
-import { Search, ArrowLeft, ArrowRight, Wrench, Zap, Settings, Hammer, Bath, Pencil, ChevronsUpDown, Package, X } from "lucide-react";
+import { Search, ArrowLeft, ArrowRight, Wrench, Zap, Settings, Hammer, Bath, Pencil, ChevronsUpDown, Package, X, Mic, Square, Loader2, Camera } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
@@ -10,12 +10,16 @@ import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover
 import type { DemoCustomer } from "@/types/demoData";
 import { formatCustomerAddressSubtitle } from "@/lib/customerAddress";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
+import type { AiQuickQuoteDraft } from "@/types/aiQuickQuote";
+import { extractQuickQuoteWithAi, filesToDataUrls } from "@/services/aiQuoteService";
+import { toast } from "@/hooks/use-toast";
 
 export interface FunnelResult {
   customer: DemoCustomer | null;
   address: string;
   bundle: BundleTemplate | null;
   description: string;
+  aiDraft?: AiQuickQuoteDraft;
 }
 
 interface QuoteFunnelProps {
@@ -58,6 +62,130 @@ export function StepIndicator({ current }: { current: number }) {
           {n < 3 && <span className="text-muted-foreground/40 text-xs mx-0.5">›</span>}
         </div>
       ))}
+    </div>
+  );
+}
+
+function QuickAiCapture({
+  customers,
+  materials,
+  onApply,
+}: {
+  customers: DemoCustomer[];
+  materials: { id: string; name: string; unit: string; unitPrice: number }[];
+  onApply: (draft: AiQuickQuoteDraft, matchedCustomer: DemoCustomer | null) => void;
+}) {
+  const [transcript, setTranscript] = useState("");
+  const [recording, setRecording] = useState(false);
+  const [extracting, setExtracting] = useState(false);
+  const [photos, setPhotos] = useState<File[]>([]);
+  const recRef = useRef<SpeechRecognition | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const stop = () => {
+    try {
+      recRef.current?.stop();
+    } catch {
+      /* ignore */
+    }
+    recRef.current = null;
+    setRecording(false);
+  };
+
+  const start = () => {
+    const w = window as Window & { SpeechRecognition?: new () => SpeechRecognition; webkitSpeechRecognition?: new () => SpeechRecognition };
+    const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
+    if (!SR) {
+      toast({ title: "Voice unavailable", description: "Use Chrome/Edge with microphone permissions.", variant: "destructive" });
+      return;
+    }
+    const rec = new SR();
+    rec.lang = "en-NZ";
+    rec.interimResults = true;
+    rec.continuous = true;
+    rec.onresult = (ev: SpeechRecognitionEvent) => {
+      let final = "";
+      let interim = "";
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const t = ev.results[i]?.[0]?.transcript ?? "";
+        if (ev.results[i].isFinal) final += `${t} `;
+        else interim += `${t} `;
+      }
+      setTranscript((prev) => `${prev}${final}`.trim() + (interim ? ` ${interim}` : ""));
+    };
+    rec.onerror = () => {
+      toast({ title: "Mic error", description: "Check microphone permission.", variant: "destructive" });
+      stop();
+    };
+    rec.onend = () => setRecording(false);
+    recRef.current = rec;
+    rec.start();
+    setRecording(true);
+  };
+
+  const apply = async () => {
+    if (!transcript.trim()) return;
+    setExtracting(true);
+    try {
+      const photoDataUrls = await filesToDataUrls(photos);
+      const draft = await extractQuickQuoteWithAi({
+        transcript: transcript.trim(),
+        photoDataUrls,
+        customers,
+        materials,
+      });
+      const matched = typeof draft.customerId === "number"
+        ? customers.find((c) => c.id === draft.customerId) ?? null
+        : null;
+      onApply(draft, matched);
+      toast({ title: "AI draft ready", description: "Review prefilled quote details." });
+    } catch (e) {
+      toast({ title: "AI extraction failed", description: e instanceof Error ? e.message : "Try again.", variant: "destructive" });
+    } finally {
+      setExtracting(false);
+    }
+  };
+
+  return (
+    <div className="rounded-xl border border-primary/30 bg-card p-4 mb-4 space-y-3">
+      <div className="flex items-center justify-between gap-2">
+        <div>
+          <p className="text-sm font-semibold text-card-foreground">Quick AI Quote</p>
+          <p className="text-xs text-muted-foreground">Tap mic, narrate the job, optionally add photos, then auto-fill.</p>
+        </div>
+        <Button type="button" size="sm" variant={recording ? "destructive" : "default"} className="gap-1" onClick={() => (recording ? stop() : start())}>
+          {recording ? <Square className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+          {recording ? "Stop" : "Record"}
+        </Button>
+      </div>
+      <Textarea
+        value={transcript}
+        onChange={(e) => setTranscript(e.target.value)}
+        placeholder="Example: New hot water cylinder at 12 Wai Shing Place for Jamie Mackie, standard kit, about 2 hours..."
+        className="min-h-[90px]"
+      />
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-xs text-muted-foreground">{photos.length} photo(s) attached</div>
+        <div className="flex items-center gap-2">
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            className="hidden"
+            onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
+          />
+          <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => fileRef.current?.click()}>
+            <Camera className="w-3.5 h-3.5" />
+            Photos
+          </Button>
+          <Button type="button" size="sm" className="gap-1" disabled={!transcript.trim() || extracting} onClick={apply}>
+            {extracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
+            Extract
+          </Button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -389,7 +517,7 @@ function StepBundle({
 
 /* ── Main Funnel (pure content, no page shell) ─────────── */
 export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initialCustomer }: QuoteFunnelProps) {
-  const { customers, usingProdData } = useDemoData();
+  const { customers, materials, usingProdData } = useDemoData();
   const demoBundles = usingProdData ? [] : bundleTemplates;
   const startStep = initialCustomer ? 2 : 1;
   const [step, _setStep] = useState(startStep);
@@ -424,8 +552,21 @@ export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initial
     onComplete({ customer, address, bundle: null, description: desc });
   };
 
+  const handleApplyAiDraft = (draft: AiQuickQuoteDraft, matchedCustomer: DemoCustomer | null) => {
+    const nextCustomer = matchedCustomer ?? customer;
+    const nextAddress = (draft.siteAddress || nextCustomer?.address || address || "").trim();
+    onComplete({
+      customer: nextCustomer,
+      address: nextAddress,
+      bundle: null,
+      description: (draft.scopeSummary || transcriptFallback(draft) || "").trim(),
+      aiDraft: draft,
+    });
+  };
+
   return (
     <div className="max-w-lg mx-auto">
+      <QuickAiCapture customers={customers} materials={materials} onApply={handleApplyAiDraft} />
       {step === 1 && (
         <StepCustomer onSelect={handleSelectCustomer} onSkip={handleSkipCustomer} label={label} customers={customers} />
       )}
@@ -448,6 +589,20 @@ export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initial
       )}
     </div>
   );
+}
+
+function transcriptFallback(draft: AiQuickQuoteDraft): string {
+  const bits: string[] = [];
+  if (draft.scopeSummary?.trim()) bits.push(draft.scopeSummary.trim());
+  if (draft.materialsSuggested?.length) {
+    const top = draft.materialsSuggested.slice(0, 3).map((m) => `${m.qty} ${m.unit} ${m.name}`).join(", ");
+    bits.push(`Materials: ${top}`);
+  }
+  if (draft.labourSuggested?.length) {
+    const h = draft.labourSuggested.reduce((s, l) => s + (l.hours || 0), 0);
+    if (h > 0) bits.push(`Labour: ${h} hours`);
+  }
+  return bits.join(". ");
 }
 
 /* Export step hook for parent to track current step */

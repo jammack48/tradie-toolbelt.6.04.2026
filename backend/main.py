@@ -1,6 +1,10 @@
+import json
 import os
-from fastapi import FastAPI
+from difflib import SequenceMatcher
+from typing import Any
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel, Field
 
 app = FastAPI(title="Tradie Toolbelt API")
 
@@ -15,6 +19,73 @@ app.add_middleware(
 # Supabase client (lazy init)
 _supabase = None
 _init_error: str | None = None
+
+
+class CandidateCustomer(BaseModel):
+    id: int
+    name: str
+    address: str = ""
+    phone: str | None = None
+    email: str | None = None
+
+
+class CandidateMaterial(BaseModel):
+    id: str
+    name: str
+    unit: str = "ea"
+    unit_price: float = 0
+
+
+class QuickQuoteExtractRequest(BaseModel):
+    transcript: str = Field(min_length=1)
+    photo_data_urls: list[str] = Field(default_factory=list)
+    candidate_customers: list[CandidateCustomer] = Field(default_factory=list)
+    candidate_materials: list[CandidateMaterial] = Field(default_factory=list)
+
+
+def _best_customer(name: str, candidates: list[CandidateCustomer]) -> tuple[int | None, float]:
+    q = (name or "").strip().lower()
+    if not q:
+        return None, 0.0
+    best_id: int | None = None
+    best_score = 0.0
+    for c in candidates:
+        score = SequenceMatcher(None, q, c.name.lower()).ratio()
+        if score > best_score:
+            best_score = score
+            best_id = c.id
+    if best_score < 0.55:
+        return None, best_score
+    return best_id, best_score
+
+
+def _best_material(name: str, candidates: list[CandidateMaterial]) -> tuple[CandidateMaterial | None, float]:
+    q = (name or "").strip().lower()
+    if not q:
+        return None, 0.0
+    best: CandidateMaterial | None = None
+    best_score = 0.0
+    for m in candidates:
+        score = SequenceMatcher(None, q, m.name.lower()).ratio()
+        if q in m.name.lower():
+            score += 0.12
+        if score > best_score:
+            best_score = score
+            best = m
+    if best_score < 0.5:
+        return None, best_score
+    return best, min(best_score, 1.0)
+
+
+def _load_json(content: str) -> dict[str, Any]:
+    try:
+        return json.loads(content)
+    except Exception:
+        start = content.find("{")
+        end = content.rfind("}")
+        if start >= 0 and end > start:
+            return json.loads(content[start : end + 1])
+        raise
 
 
 def _detect_key_type(key: str) -> str:
@@ -90,3 +161,119 @@ async def health_check():
             return {"status": "ok", "db": "schema_mismatch", "debug": debug}
         debug["query_error"] = f"{type(e).__name__}: {err[:200]}"
         return {"status": "ok", "db": "query_failed", "debug": debug}
+
+
+@app.post("/ai/quick-quote-extract")
+async def quick_quote_extract(payload: QuickQuoteExtractRequest):
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured on backend.")
+
+    try:
+        from openai import OpenAI
+
+        model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        client = OpenAI(api_key=api_key)
+
+        system = (
+            "You extract tradie quote details into strict JSON. "
+            "Do not invent customer names or addresses. "
+            "Use best-effort estimates for labour/materials with confidence 0..1. "
+            "Return ONLY JSON."
+        )
+
+        user_text = {
+            "transcript": payload.transcript,
+            "customer_candidates": [c.model_dump() for c in payload.candidate_customers][:200],
+            "material_candidates": [m.model_dump() for m in payload.candidate_materials][:500],
+            "output_schema": {
+                "customer_name": "string",
+                "site_address": "string",
+                "scope_summary": "string",
+                "materials_suggested": [
+                    {"name": "string", "qty": "number", "unit": "string", "unit_price": "number|null", "confidence": "0..1"}
+                ],
+                "labour_suggested": [
+                    {"role": "string", "hours": "number", "rate": "number|null", "confidence": "0..1"}
+                ],
+                "assumptions": ["string"],
+                "missing_fields": ["string"],
+                "review_flags": ["string"],
+            },
+        }
+
+        content: list[dict[str, Any]] = [{"type": "text", "text": json.dumps(user_text)}]
+        for data_url in payload.photo_data_urls[:4]:
+            if data_url.startswith("data:image/"):
+                content.append({"type": "image_url", "image_url": {"url": data_url}})
+
+        resp = client.chat.completions.create(
+            model=model,
+            temperature=0.15,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": content},
+            ],
+        )
+        raw = resp.choices[0].message.content or "{}"
+        parsed = _load_json(raw)
+
+        customer_name = str(parsed.get("customer_name") or "").strip()
+        customer_id, customer_conf = _best_customer(customer_name, payload.candidate_customers)
+
+        materials_out: list[dict[str, Any]] = []
+        for m in parsed.get("materials_suggested") or []:
+            name = str((m or {}).get("name") or "").strip()
+            qty = float((m or {}).get("qty") or 0) if str((m or {}).get("qty") or "").strip() else 0.0
+            unit = str((m or {}).get("unit") or "ea").strip() or "ea"
+            conf = float((m or {}).get("confidence") or 0.6)
+            matched, _ms = _best_material(name, payload.candidate_materials)
+            unit_price = (m or {}).get("unit_price")
+            if matched and (unit_price is None or unit_price == ""):
+                unit_price = matched.unit_price
+            materials_out.append(
+                {
+                    "itemId": matched.id if matched else None,
+                    "name": matched.name if matched else name,
+                    "qty": max(1.0, qty if qty > 0 else 1.0),
+                    "unit": matched.unit if matched else unit,
+                    "unitPrice": float(unit_price) if unit_price is not None else None,
+                    "confidence": min(max(conf, 0.0), 1.0),
+                    "source": "ai+catalog" if matched else "ai",
+                }
+            )
+
+        labour_out: list[dict[str, Any]] = []
+        for l in parsed.get("labour_suggested") or []:
+            role = str((l or {}).get("role") or "Labour").strip() or "Labour"
+            hours = float((l or {}).get("hours") or 0.0)
+            rate = (l or {}).get("rate")
+            conf = float((l or {}).get("confidence") or 0.6)
+            labour_out.append(
+                {
+                    "role": role,
+                    "hours": max(0.5, hours if hours > 0 else 0.5),
+                    "rate": float(rate) if rate is not None else None,
+                    "confidence": min(max(conf, 0.0), 1.0),
+                }
+            )
+
+        return {
+            "customerId": customer_id,
+            "customerName": customer_name or None,
+            "customerConfidence": customer_conf if customer_name else 0.0,
+            "isNewCustomer": customer_id is None,
+            "siteAddress": str(parsed.get("site_address") or "").strip(),
+            "siteAddressConfidence": 0.75 if parsed.get("site_address") else 0.0,
+            "scopeSummary": str(parsed.get("scope_summary") or "").strip() or payload.transcript[:500],
+            "materialsSuggested": materials_out,
+            "labourSuggested": labour_out,
+            "assumptions": [str(x) for x in (parsed.get("assumptions") or []) if str(x).strip()],
+            "missingFields": [str(x) for x in (parsed.get("missing_fields") or []) if str(x).strip()],
+            "reviewFlags": [str(x) for x in (parsed.get("review_flags") or []) if str(x).strip()],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI extraction error: {type(e).__name__}: {str(e)[:180]}")

@@ -21,6 +21,7 @@ import { useDemoData } from "@/contexts/DemoDataContext";
 import { useUserSettings } from "@/contexts/UserSettingsContext";
 import { loadQuoteFavorites, saveQuoteFavorite } from "@/lib/quoteFavorites";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
+import type { AiQuickQuoteDraft } from "@/types/aiQuickQuote";
 
 interface LineItem {
   id: string;
@@ -45,6 +46,7 @@ interface QuoteTabProps {
   job: JobDetail;
   initialBundle?: import("@/data/dummyJobDetails").BundleTemplate;
   initialDescription?: string;
+  initialAiDraft?: AiQuickQuoteDraft;
   beforeActions?: React.ReactNode;
   onSendQuote?: (total: number) => void;
 }
@@ -156,7 +158,7 @@ function BlockSection({ label, items, section, isOpen, onToggle, onUpdate, onDel
 }
 
 /* ── Main QuoteTab ──────────────────────────────────────── */
-export function QuoteTab({ job, initialBundle, initialDescription, beforeActions, onSendQuote }: QuoteTabProps) {
+export function QuoteTab({ job, initialBundle, initialDescription, initialAiDraft, beforeActions, onSendQuote }: QuoteTabProps) {
   const { materials, usingProdData } = useDemoData();
   const { companyId } = useUserSettings();
   const bundleOptions = usingProdData ? [] : bundleTemplates;
@@ -225,13 +227,28 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
     id: blockId(), name: "", description: "", qty: 1, labour: [], materials: [], extras: [],
   });
 
+  const createBlockFromAiDraft = (draft: AiQuickQuoteDraft): QuoteBlock => ({
+    id: blockId(),
+    name: job.jobName || "Quick Quote",
+    description: draft.scopeSummary || initialDescription || "",
+    qty: 1,
+    labour: (draft.labourSuggested ?? []).map((l) =>
+      mkItem(l.role || "Labour", Math.max(0.5, l.hours || 0.5), l.rate ?? HOURLY_RATE)
+    ),
+    materials: (draft.materialsSuggested ?? []).map((m) =>
+      mkItem(m.name, Math.max(1, m.qty || 1), m.unitPrice ?? 0)
+    ),
+    extras: [],
+  });
+
   const initialBlocks = useMemo((): QuoteBlock[] => {
+    if (initialAiDraft) return [createBlockFromAiDraft(initialAiDraft)];
     if (initialBundle) return [createBlockFromBundle(initialBundle)];
     if (job.timeEntries.length > 0 || job.materials.length > 0) {
       return [createBlockFromJob()];
     }
     return [{ id: blockId(), name: initialDescription ? "Custom Job" : "", description: initialDescription || "", qty: 1, labour: [], materials: [], extras: [] }];
-  }, [initialBundle, initialDescription, job, usingProdData]);
+  }, [initialAiDraft, initialBundle, initialDescription, job, usingProdData]);
 
   const [blocks, setBlocks] = useState<QuoteBlock[]>(() => initialBlocks);
   const [descUnlocked, setDescUnlocked] = useState<Record<string, boolean>>({});

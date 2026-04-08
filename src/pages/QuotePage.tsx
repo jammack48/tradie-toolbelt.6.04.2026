@@ -344,6 +344,7 @@ export default function QuotePage() {
           onSendQuote={handleSendQuote}
           initialBundle={funnelData?.bundle || undefined}
           initialDescription={funnelData?.description || undefined}
+          initialAiDraft={funnelData?.aiDraft}
           beforeActions={
           <SequenceSelector category="quotes" selectedId={selectedSequenceId} onSelect={setSelectedSequenceId} />
         } />
