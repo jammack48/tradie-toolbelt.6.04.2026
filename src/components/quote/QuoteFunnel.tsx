@@ -8,6 +8,7 @@ import { bundleTemplates, type BundleTemplate } from "@/data/dummyJobDetails";
 import { Command, CommandInput, CommandList, CommandItem, CommandEmpty, CommandGroup } from "@/components/ui/command";
 import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
 import type { DemoCustomer } from "@/types/demoData";
+import { formatCustomerAddressSubtitle } from "@/lib/customerAddress";
 
 export interface FunnelResult {
   customer: DemoCustomer | null;
@@ -70,8 +71,9 @@ function StepCustomer({ onSelect, onSkip, label = "quote", customers }: { onSele
     return customers.filter(
       (c) =>
         c.name.toLowerCase().includes(q) ||
-        c.phone.includes(q) ||
-        c.address.toLowerCase().includes(q)
+        (c.phone ?? "").includes(q) ||
+        (c.email ?? "").toLowerCase().includes(q) ||
+        (c.address ?? "").toLowerCase().includes(q)
     );
   }, [customers, search]);
 
@@ -99,7 +101,14 @@ function StepCustomer({ onSelect, onSkip, label = "quote", customers }: { onSele
           >
             <div className="font-medium text-sm text-card-foreground">{c.name}</div>
             <div className="text-xs text-muted-foreground mt-0.5">
-              {c.phone} · {c.address}
+              {(() => {
+                const phone = (c.phone ?? "").trim();
+                const addr = formatCustomerAddressSubtitle(c.address);
+                if (phone && addr) return `${phone} · ${addr}`;
+                if (phone) return phone;
+                if (addr) return addr;
+                return (c.email ?? "").trim() || "No contact on file";
+              })()}
             </div>
           </button>
         ))}
@@ -125,19 +134,31 @@ function StepAddress({
   onAddressChange,
   onNext,
   onBack,
+  customer,
 }: {
   address: string;
   onAddressChange: (v: string) => void;
   onNext: () => void;
   onBack: () => void;
+  customer: DemoCustomer | null;
 }) {
+  const primary = (customer?.address ?? "").trim();
+
   return (
     <div className="space-y-6">
-      <button onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
+      <button type="button" onClick={onBack} className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer">
         <ArrowLeft className="w-4 h-4" /> Back
       </button>
 
       <h2 className="text-lg font-bold text-card-foreground">Site Address</h2>
+
+      {customer && (
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          {primary
+            ? "Loaded from the customer record. Change it if this job is at a different site."
+            : "No address on file for this customer — enter the job site below."}
+        </p>
+      )}
 
       <Input
         value={address}
@@ -147,7 +168,30 @@ function StepAddress({
         autoFocus
       />
 
-      <Button className="w-full h-12 gap-2" onClick={onNext}>
+      {customer && primary ? (
+        <div className="flex flex-col gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="w-full h-10 text-xs"
+            onClick={() => onAddressChange(primary)}
+          >
+            Reset to customer&apos;s address
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="w-full h-9 text-xs text-muted-foreground"
+            onClick={() => onAddressChange("")}
+          >
+            Different site — clear and type a new address
+          </Button>
+        </div>
+      ) : null}
+
+      <Button type="button" className="w-full h-12 gap-2" onClick={onNext}>
         Next <ArrowRight className="w-4 h-4" />
       </Button>
     </div>
@@ -319,11 +363,18 @@ export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initial
   const [step, _setStep] = useState(startStep);
   const setStep = (s: number) => { _setStep(s); onStepChange?.(s); };
   const [customer, setCustomer] = useState<DemoCustomer | null>(initialCustomer || null);
-  const [address, setAddress] = useState(initialCustomer?.address || "");
+  const [address, setAddress] = useState(() => (initialCustomer?.address ?? "").trim());
+
+  useEffect(() => {
+    if (step !== 2 || !customer) return;
+    const fromCustomer = (customer.address ?? "").trim();
+    if (!fromCustomer) return;
+    setAddress((prev) => (prev.trim() ? prev : fromCustomer));
+  }, [step, customer]);
 
   const handleSelectCustomer = (c: DemoCustomer) => {
     setCustomer(c);
-    setAddress(c.address);
+    setAddress((c.address ?? "").trim());
     setStep(2);
   };
 
@@ -352,6 +403,7 @@ export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initial
           onAddressChange={setAddress}
           onNext={() => setStep(3)}
           onBack={() => setStep(1)}
+          customer={customer}
         />
       )}
       {step === 3 && (

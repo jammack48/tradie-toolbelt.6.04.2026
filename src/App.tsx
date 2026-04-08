@@ -12,7 +12,9 @@ import { TutorialProvider } from "@/contexts/TutorialContext";
 import { AppModeProvider, useAppMode } from "@/contexts/AppModeContext";
 import { UserSettingsProvider } from "@/contexts/UserSettingsContext";
 import { DemoDataProvider } from "@/contexts/DemoDataContext";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { supabase } from "@/lib/supabase";
+import { EntryFlowActionsProvider } from "@/contexts/EntryFlowContext";
 import { JobPrefixProvider } from "@/contexts/JobPrefixContext";
 import { BackendProvider } from "@/contexts/BackendContext";
 import { BackendLogPanel } from "@/components/BackendLogPanel";
@@ -55,7 +57,7 @@ import PostLoginWorkspaceGate from "./pages/PostLoginWorkspaceGate";
 const queryClient = new QueryClient();
 
 function AppLayout() {
-  const { mode, trade, isWorkMode, isTimesheetOnlyMode, isIntroMode } = useAppMode();
+  const { mode, trade, isWorkMode, isTimesheetOnlyMode, isIntroMode, clearMode, clearTrade } = useAppMode();
   const { position } = useToolbarPosition();
   const navigate = useNavigate();
   const location = useLocation();
@@ -64,6 +66,26 @@ function AppLayout() {
   const [entryStep, setEntryStep] = useState<EntryStep>(() => (mode && trade ? "ready" : "entry"));
 
   const beginPostLogin = () => setEntryStep("post_login_workspace");
+
+  const goToLogin = useCallback(async () => {
+    navigate("/", { replace: true });
+    await supabase.auth.signOut();
+    setEntryStep("login");
+  }, [navigate]);
+
+  const goToEntry = useCallback(async () => {
+    navigate("/", { replace: true });
+    await supabase.auth.signOut();
+    clearMode();
+    clearTrade();
+    setEntryStep("entry");
+  }, [navigate, clearMode, clearTrade]);
+
+  const withEntryActions = (node: ReactNode) => (
+    <EntryFlowActionsProvider goToLogin={goToLogin} goToEntry={goToEntry}>
+      {node}
+    </EntryFlowActionsProvider>
+  );
 
   useEffect(() => {
     if (entryStep === "trade" && trade) {
@@ -89,7 +111,7 @@ function AppLayout() {
   }, [mode, entryStep, navigate, location.pathname]);
 
   if (entryStep === "entry") {
-    return (
+    return withEntryActions(
       <EntryPage
         onLogin={() => setEntryStep("login")}
         onDemo={() => setEntryStep(trade ? (mode ? "ready" : "mode") : "trade")}
@@ -98,7 +120,7 @@ function AppLayout() {
   }
 
   if (entryStep === "login") {
-    return (
+    return withEntryActions(
       <LoginPage
         onSuccess={beginPostLogin}
         onBack={() => setEntryStep("entry")}
@@ -107,7 +129,7 @@ function AppLayout() {
   }
 
   if (entryStep === "post_login_workspace") {
-    return (
+    return withEntryActions(
       <PostLoginWorkspaceGate
         onComplete={() => setEntryStep("ready")}
         onSignOut={() => setEntryStep("entry")}
@@ -116,14 +138,14 @@ function AppLayout() {
   }
 
   if (!trade || entryStep === "trade") {
-    return <TradePicker />;
+    return withEntryActions(<TradePicker />);
   }
 
   if (!mode || entryStep === "mode") {
-    return <ModePicker />;
+    return withEntryActions(<ModePicker />);
   }
 
-  return (
+  return withEntryActions(
     <div className="min-h-screen bg-background">
       <AppHeader />
       <div

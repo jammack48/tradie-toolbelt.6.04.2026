@@ -260,25 +260,34 @@ export type Database = {
         Row: {
           id: string
           company_id: string | null
+          supplier_id?: string | null
           name: string | null
           unit: string | null
           unit_price: number | null
+          cost_price?: number | null
+          sell_price?: number | null
           sku: string | null
         }
         Insert: {
           id?: string
           company_id?: string | null
+          supplier_id?: string | null
           name?: string | null
           unit?: string | null
           unit_price?: number | null
+          cost_price?: number | null
+          sell_price?: number | null
           sku?: string | null
         }
         Update: {
           name?: string | null
           unit?: string | null
           unit_price?: number | null
+          cost_price?: number | null
+          sell_price?: number | null
           sku?: string | null
           company_id?: string | null
+          supplier_id?: string | null
         }
         Relationships: []
       }

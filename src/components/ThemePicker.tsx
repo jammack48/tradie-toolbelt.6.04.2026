@@ -5,6 +5,9 @@ import { Switch } from "@/components/ui/switch";
 import { Sun, Moon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAppMode } from "@/contexts/AppModeContext";
+import { useUserSettings } from "@/contexts/UserSettingsContext";
+import { updateProdUserShellSettings } from "@/services/prodDataService";
+import { toast } from "@/hooks/use-toast";
 
 const THEMES: { id: Theme; label: string; color: string; darkColor: string }[] = [
   { id: "earthy",  label: "Earthy",  color: "#6b8f71",  darkColor: "#5a7a5f" },
@@ -38,6 +41,31 @@ function RiserIcon({ className }: { className?: string }) {
 export function ThemePicker() {
   const { theme, setTheme, isDark, setIsDark } = useTheme();
   const { isIntroMode } = useAppMode();
+  const { userId, refresh } = useUserSettings();
+
+  const persistShell = async (patch: { theme?: Theme; is_dark?: boolean }) => {
+    if (!userId) return;
+    try {
+      await updateProdUserShellSettings(userId, patch);
+      await refresh();
+    } catch (e) {
+      toast({
+        title: "Could not save theme",
+        description: e instanceof Error ? e.message : "Check Supabase RLS for prod_user_settings.",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const pickTheme = (t: Theme) => {
+    setTheme(t);
+    void persistShell({ theme: t });
+  };
+
+  const toggleDark = (d: boolean) => {
+    setIsDark(d);
+    void persistShell({ is_dark: d });
+  };
 
   return (
     <Popover>
@@ -58,7 +86,7 @@ export function ThemePicker() {
             <button
               key={t.id}
               title={t.label}
-              onClick={() => setTheme(t.id)}
+              onClick={() => pickTheme(t.id)}
               className={cn(
                 "group flex flex-col items-center gap-1.5 focus:outline-none"
               )}
@@ -86,7 +114,7 @@ export function ThemePicker() {
             {isDark ? <Moon className="w-3.5 h-3.5" /> : <Sun className="w-3.5 h-3.5" />}
             {isDark ? "Dark" : "Light"}
           </div>
-          <Switch checked={isDark} onCheckedChange={setIsDark} />
+          <Switch checked={isDark} onCheckedChange={toggleDark} />
         </div>
       </PopoverContent>
     </Popover>

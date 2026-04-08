@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useCallback, useMemo, type ReactNode } from "react";
 
 export type ToolbarPosition = "left" | "right" | "top" | "bottom";
 
@@ -10,6 +10,15 @@ function getStoredPosition(): ToolbarPosition {
     if (v && POSITION_CYCLE.includes(v as ToolbarPosition)) return v as ToolbarPosition;
   } catch {}
   return "left";
+}
+
+/** Next position in the cycle (same logic as `cyclePosition`). */
+export function getNextToolbarPosition(current: ToolbarPosition, skip?: ToolbarPosition[]): ToolbarPosition {
+  let idx = POSITION_CYCLE.indexOf(current);
+  do {
+    idx = (idx + 1) % POSITION_CYCLE.length;
+  } while (skip?.includes(POSITION_CYCLE[idx]));
+  return POSITION_CYCLE[idx];
 }
 
 interface ToolbarPositionContextValue {
@@ -27,20 +36,21 @@ export function ToolbarPositionProvider({ children }: { children: ReactNode }) {
     localStorage.setItem("toolbar-position", position);
   }, [position]);
 
-  const cyclePosition = (skip?: ToolbarPosition[]) => {
-    let idx = POSITION_CYCLE.indexOf(position);
-    do {
-      idx = (idx + 1) % POSITION_CYCLE.length;
-    } while (skip?.includes(POSITION_CYCLE[idx]));
-    setPosition(POSITION_CYCLE[idx]);
-  };
+  const cyclePosition = useCallback((skip?: ToolbarPosition[]) => {
+    setPosition((pos) => getNextToolbarPosition(pos, skip));
+  }, []);
 
-  const setToolbarPosition = (p: ToolbarPosition) => {
+  const setToolbarPosition = useCallback((p: ToolbarPosition) => {
     if (POSITION_CYCLE.includes(p)) setPosition(p);
-  };
+  }, []);
+
+  const value = useMemo(
+    () => ({ position, cyclePosition, setToolbarPosition }),
+    [position, cyclePosition, setToolbarPosition]
+  );
 
   return (
-    <ToolbarPositionContext.Provider value={{ position, cyclePosition, setToolbarPosition }}>
+    <ToolbarPositionContext.Provider value={value}>
       {children}
     </ToolbarPositionContext.Provider>
   );

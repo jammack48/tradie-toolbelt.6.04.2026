@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState } from "react";
+import { createContext, useContext, useEffect, useState, useCallback, useMemo, useRef } from "react";
 
 export type Theme = "earthy" | "ocean" | "ember" | "rose" | "slate";
 
@@ -26,30 +26,39 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     return stored === null ? true : stored === "true";
   });
 
+  const themeRef = useRef(theme);
+  themeRef.current = theme;
+  const isDarkRef = useRef(isDark);
+  isDarkRef.current = isDark;
+
   useEffect(() => {
     applyTheme(theme, isDark);
   }, [theme, isDark]);
 
-  // Apply on mount
   useEffect(() => {
     applyTheme(theme, isDark);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const setTheme = (t: Theme) => {
+  const setTheme = useCallback((t: Theme) => {
     setThemeState(t);
     localStorage.setItem("theme", t);
-    applyTheme(t, isDark);
-  };
+    applyTheme(t, isDarkRef.current);
+  }, []);
 
-  const setIsDark = (d: boolean) => {
+  const setIsDark = useCallback((d: boolean) => {
     setIsDarkState(d);
     localStorage.setItem("isDark", String(d));
-    applyTheme(theme, d);
-  };
+    applyTheme(themeRef.current, d);
+  }, []);
+
+  const value = useMemo(
+    () => ({ theme, setTheme, isDark, setIsDark }),
+    [theme, setTheme, isDark, setIsDark]
+  );
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme, isDark, setIsDark }}>
+    <ThemeContext.Provider value={value}>
       {children}
     </ThemeContext.Provider>
   );

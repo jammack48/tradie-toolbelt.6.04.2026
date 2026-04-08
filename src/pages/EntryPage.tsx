@@ -1,5 +1,7 @@
+import { useLayoutEffect } from "react";
 import { LogIn, PlayCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface EntryPageProps {
   onLogin: () => void;
@@ -7,6 +9,13 @@ interface EntryPageProps {
 }
 
 export default function EntryPage({ onLogin, onDemo }: EntryPageProps) {
+  const { setTheme, setIsDark } = useTheme();
+
+  useLayoutEffect(() => {
+    setTheme("earthy");
+    setIsDark(true);
+  }, [setTheme, setIsDark]);
+
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6">
       <div className="w-full max-w-md space-y-6">

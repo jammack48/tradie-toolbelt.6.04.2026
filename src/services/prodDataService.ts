@@ -3,6 +3,7 @@ import type { Json, Tables, TablesInsert } from "@/integrations/supabase/types";
 import type { DemoCustomer, DemoMaterial } from "@/types/demoData";
 import type { Trade } from "@/contexts/AppModeContext";
 import { parseBusinessProfile, type BusinessProfile, type StoredAppMode } from "@/lib/businessProfile";
+import { normalizeCustomerAddress } from "@/lib/customerAddress";
 
 export type { StoredAppMode, BusinessProfile } from "@/lib/businessProfile";
 
@@ -31,7 +32,7 @@ function rowToDemoCustomer(row: Tables<"prod_customers">): DemoCustomer {
     name: row.name ?? "",
     phone: row.phone ?? "",
     email: row.email ?? "",
-    address: row.address ?? "",
+    address: normalizeCustomerAddress(row.address),
     jobs: row.jobs ?? 0,
     status,
     totalSpend: row.total_spend ?? 0,
@@ -99,12 +100,19 @@ export async function fetchProdCatalogueMaterials(companyId: string): Promise<De
     .eq("company_id", companyId)
     .order("name", { ascending: true });
   if (error) throw error;
-  return (data ?? []).map((row) => ({
-    id: String(row.id),
-    name: row.name ?? "Item",
-    unit: row.unit ?? "ea",
-    unitPrice: row.unit_price ?? 0,
-  }));
+  return (data ?? []).map((row) => {
+    const n = (v: number | null | undefined) => (v == null ? NaN : Number(v));
+    let unitPrice = 0;
+    if (Number.isFinite(n(row.sell_price))) unitPrice = n(row.sell_price);
+    else if (Number.isFinite(n(row.unit_price))) unitPrice = n(row.unit_price);
+    else if (Number.isFinite(n(row.cost_price))) unitPrice = n(row.cost_price);
+    return {
+      id: String(row.id),
+      name: row.name ?? "Item",
+      unit: row.unit ?? "ea",
+      unitPrice,
+    };
+  });
 }
 
 export async function insertProdCustomer(
@@ -127,4 +135,21 @@ export async function insertProdCustomer(
   const { data, error } = await supabase.from("prod_customers").insert(insert).select("*").single();
   if (error) throw error;
   return rowToDemoCustomer(data);
+}
+
+export type ProdShellSettingsPatch = {
+  theme?: string;
+  is_dark?: boolean;
+  toolbar_position?: string;
+};
+
+export async function updateProdUserShellSettings(
+  userId: string,
+  patch: ProdShellSettingsPatch
+): Promise<void> {
+  const { error } = await supabase
+    .from("prod_user_settings")
+    .update({ ...patch, updated_at: new Date().toISOString() })
+    .eq("user_id", userId);
+  if (error) throw error;
 }

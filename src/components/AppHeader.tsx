@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Wrench, Settings as SettingsIcon, GraduationCap, Shield, LayoutGrid, ChevronDown } from "lucide-react";
+import { Wrench, Settings as SettingsIcon, GraduationCap, Shield, LayoutGrid, ChevronDown, LogIn, LogOut } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { ThemePicker } from "@/components/ThemePicker";
@@ -8,15 +8,20 @@ import { BackendStatus } from "@/components/BackendStatus";
 import { useTutorial } from "@/contexts/TutorialContext";
 import { useAppMode } from "@/contexts/AppModeContext";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { useToolbarPosition } from "@/contexts/ToolbarPositionContext";
+import { useToolbarPosition, getNextToolbarPosition } from "@/contexts/ToolbarPositionContext";
+import { useUserSettings } from "@/contexts/UserSettingsContext";
+import { updateProdUserShellSettings } from "@/services/prodDataService";
+import { toast } from "@/hooks/use-toast";
 import { resolveLandingPath } from "@/lib/navigation/resolveLanding";
 import { Tooltip, TooltipTrigger, TooltipContent } from "@/components/ui/tooltip";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useEntryFlowActions } from "@/contexts/EntryFlowContext";
 
 export function AppHeader() {
   const navigate = useNavigate();
@@ -25,6 +30,26 @@ export function AppHeader() {
   const { isWorkMode, isSoleTrader, isTimesheetOnlyMode, clearMode, clearTrade, setMode } = useAppMode();
   const isMobile = useIsMobile();
   const { position, cyclePosition } = useToolbarPosition();
+  const { userId, refresh } = useUserSettings();
+  const { goToLogin, goToEntry } = useEntryFlowActions();
+
+  const handleCycleToolbar = () => {
+    const next = getNextToolbarPosition(position);
+    cyclePosition();
+    if (!userId) return;
+    void (async () => {
+      try {
+        await updateProdUserShellSettings(userId, { toolbar_position: next });
+        await refresh();
+      } catch (e) {
+        toast({
+          title: "Could not save menu position",
+          description: e instanceof Error ? e.message : "Check Supabase RLS for prod_user_settings.",
+          variant: "destructive",
+        });
+      }
+    })();
+  };
   const [showMenuHint, setShowMenuHint] = useState(true);
 
   useEffect(() => {
@@ -85,6 +110,25 @@ export function AppHeader() {
             <DropdownMenuItem onClick={() => { clearMode(); navigate("/"); }}>
               Main Menu
             </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="gap-2"
+              onClick={() => {
+                void goToLogin();
+              }}
+            >
+              <LogIn className="w-4 h-4" />
+              Login
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              className="gap-2"
+              onClick={() => {
+                void goToEntry();
+              }}
+            >
+              <LogOut className="w-4 h-4" />
+              Start screen (sign out)
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -94,7 +138,7 @@ export function AppHeader() {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => cyclePosition()}
+                onClick={() => handleCycleToolbar()}
                 className={cn(
                   "h-9 w-9 p-0 rounded-lg text-muted-foreground hover:bg-accent",
                   showMenuHint && "animate-pulse ring-2 ring-primary/70 ring-offset-1 ring-offset-background"

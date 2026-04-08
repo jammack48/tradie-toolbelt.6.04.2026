@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { ArrowLeft, LogIn } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { useTheme } from "@/contexts/ThemeContext";
 
 interface LoginPageProps {
   onSuccess: () => void;
@@ -15,6 +16,12 @@ export default function LoginPage({ onSuccess, onBack }: LoginPageProps) {
   const [password, setPassword] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { setTheme, setIsDark } = useTheme();
+
+  useLayoutEffect(() => {
+    setTheme("earthy");
+    setIsDark(true);
+  }, [setTheme, setIsDark]);
 
   useEffect(() => {
     let isMounted = true;

@@ -14,9 +14,10 @@ import {
 import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import type { JobDetail } from "@/data/dummyJobDetails";
-import { catalogueItems, bundleTemplates } from "@/data/dummyJobDetails";
+import { catalogueItems as staticCatalogueItems, bundleTemplates, type CatalogueItem } from "@/data/dummyJobDetails";
 import { coverLetterTemplates } from "@/data/coverLetterTemplates";
 import { QuotePreview } from "@/components/quote/QuotePreview";
+import { useDemoData } from "@/contexts/DemoDataContext";
 
 interface LineItem {
   id: string;
@@ -233,6 +234,21 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
 
   const lastInputRef = useRef<HTMLInputElement>(null);
 
+  const { materials, usingProdData } = useDemoData();
+  const catalogueItems = useMemo((): CatalogueItem[] => {
+    if (!usingProdData) return staticCatalogueItems;
+    const prodMaterials: CatalogueItem[] = materials.map((m) => ({
+      id: `prod-${m.id}`,
+      name: m.name,
+      quantity: 1,
+      unit: m.unit,
+      unitPrice: m.unitPrice,
+      supplier: "",
+      section: "materials",
+    }));
+    return staticCatalogueItems.filter((i) => i.section !== "materials").concat(prodMaterials);
+  }, [usingProdData, materials]);
+
   // Apply global markup to all items in all blocks
   const applyGlobalMarkup = useCallback((markupVal: number) => {
     setBlocks((prev) => prev.map((block) => ({
@@ -296,7 +312,7 @@ export function QuoteTab({ job, initialBundle, initialDescription, beforeActions
     openSection(blkId, section);
   };
 
-  const addCatalogueItem = useCallback((item: typeof catalogueItems[0]) => {
+  const addCatalogueItem = useCallback((item: CatalogueItem) => {
     if (!paletteBlockId) return;
     const defaultMarkup = useGlobalMarkup ? globalMarkupValue : 0;
     const sellPrice = item.unitPrice * (1 + defaultMarkup / 100);

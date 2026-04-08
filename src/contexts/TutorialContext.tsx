@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from "react";
+import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from "react";
 
 interface TutorialContextType {
   tutorialOn: boolean;
@@ -16,8 +16,17 @@ export function TutorialProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem("tutorialOn", String(tutorialOn));
   }, [tutorialOn]);
 
+  const setTutorialOnStable = useCallback((on: boolean) => {
+    setTutorialOn(on);
+  }, []);
+
+  const value = useMemo(
+    () => ({ tutorialOn, setTutorialOn: setTutorialOnStable }),
+    [tutorialOn, setTutorialOnStable]
+  );
+
   return (
-    <TutorialContext.Provider value={{ tutorialOn, setTutorialOn }}>
+    <TutorialContext.Provider value={value}>
       {children}
     </TutorialContext.Provider>
   );

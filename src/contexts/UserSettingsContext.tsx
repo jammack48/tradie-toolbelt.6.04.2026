@@ -67,8 +67,20 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, [refresh]);
 
+  const serverPrefsKey = settings
+    ? [
+        settings.user_id,
+        settings.theme,
+        settings.is_dark,
+        settings.toolbar_position,
+        settings.tutorials_enabled,
+        settings.van_stock,
+        settings.reconcile_docs,
+      ].join("|")
+    : "";
+
   useEffect(() => {
-    if (!settings) return;
+    if (!settings || !serverPrefsKey) return;
     const th = settings.theme as Theme;
     if (VALID_THEMES.includes(th)) setTheme(th);
     setIsDark(settings.is_dark);
@@ -79,7 +91,7 @@ export function UserSettingsProvider({ children }: { children: ReactNode }) {
       vanStock: settings.van_stock ?? false,
       reconcileDocs: settings.reconcile_docs ?? false,
     });
-  }, [settings, setTheme, setIsDark, setToolbarPosition, setTutorialOn, setSoleTraderPrefs]);
+  }, [serverPrefsKey, settings]);
 
   const value = useMemo<UserSettingsContextValue>(
     () => ({

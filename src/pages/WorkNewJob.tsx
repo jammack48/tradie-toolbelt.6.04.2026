@@ -8,10 +8,13 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { DUMMY_CUSTOMERS } from "@/data/dummyCustomers";
 import { DEMO_JOBS, WORK_START, WORK_END, HOUR_HEIGHT_MOBILE, formatTime } from "@/components/schedule/scheduleData";
 import { DayStrip } from "@/components/schedule/DayStrip";
 import { useAppMode } from "@/contexts/AppModeContext";
+import { useDemoData } from "@/contexts/DemoDataContext";
+import type { DemoCustomer } from "@/types/demoData";
+import { formatCustomerAddressSubtitle, normalizeCustomerAddress } from "@/lib/customerAddress";
+import { VoiceInputButton } from "@/components/VoiceInputButton";
 
 /* ─── Step Indicator ─── */
 function StepDots({ current }: { current: number }) {
@@ -33,12 +36,14 @@ function StepDots({ current }: { current: number }) {
 
 /* ─── Customer Picker ─── */
 function CustomerPicker({
+  customers,
   customer, setCustomer,
   address, setAddress,
   description, setDescription,
   isNewCustomer, setIsNewCustomer,
   requireDescription = false,
 }: {
+  customers: DemoCustomer[];
   customer: string; setCustomer: (v: string) => void;
   address: string; setAddress: (v: string) => void;
   description: string; setDescription: (v: string) => void;
@@ -49,16 +54,22 @@ function CustomerPicker({
   const [showDropdown, setShowDropdown] = useState(false);
 
   const filtered = useMemo(() => {
-    if (!search.trim()) return DUMMY_CUSTOMERS;
+    if (!search.trim()) return customers;
     const q = search.toLowerCase();
-    return DUMMY_CUSTOMERS.filter(c =>
-      c.name.toLowerCase().includes(q) || c.address.toLowerCase().includes(q)
-    );
-  }, [search]);
+    return customers.filter((c) => {
+      const addr = (c.address ?? "").toLowerCase();
+      return (
+        c.name.toLowerCase().includes(q) ||
+        addr.includes(q) ||
+        (c.phone ?? "").toLowerCase().includes(q) ||
+        (c.email ?? "").toLowerCase().includes(q)
+      );
+    });
+  }, [customers, search]);
 
-  const selectCustomer = (c: typeof DUMMY_CUSTOMERS[0]) => {
+  const selectCustomer = (c: DemoCustomer) => {
     setCustomer(c.name);
-    setAddress(c.address);
+    setAddress(normalizeCustomerAddress(c.address));
     setSearch(c.name);
     setShowDropdown(false);
     setIsNewCustomer(false);
@@ -112,16 +123,21 @@ function CustomerPicker({
                 >
                   <Plus className="w-4 h-4" /> New Customer
                 </button>
-                {filtered.map(c => (
-                  <button
-                    key={c.id}
-                    onClick={() => selectCustomer(c)}
-                    className="w-full flex flex-col items-start px-3 py-2.5 hover:bg-accent transition-colors text-left"
-                  >
-                    <span className="text-sm font-medium text-foreground">{c.name}</span>
-                    <span className="text-xs text-muted-foreground">{c.address}</span>
-                  </button>
-                ))}
+                {filtered.map((c) => {
+                  const addr = formatCustomerAddressSubtitle(c.address);
+                  return (
+                    <button
+                      key={c.id}
+                      onClick={() => selectCustomer(c)}
+                      className="w-full flex flex-col items-start px-3 py-2.5 hover:bg-accent transition-colors text-left"
+                    >
+                      <span className="text-sm font-medium text-foreground">{c.name}</span>
+                      <span className="text-xs text-muted-foreground">
+                        {addr || (c.phone ?? "").trim() || (c.email ?? "").trim() || "No address on file"}
+                      </span>
+                    </button>
+                  );
+                })}
                 {filtered.length === 0 && (
                   <div className="px-3 py-3 text-sm text-muted-foreground text-center">
                     No matches — tap "New Customer" above
@@ -135,12 +151,23 @@ function CustomerPicker({
 
       <div className="space-y-2">
         <Label className="flex items-center gap-1.5"><MapPin className="w-3.5 h-3.5" /> Site Address</Label>
-        <Input
-          value={address}
-          onChange={e => setAddress(e.target.value)}
-          placeholder="e.g. 42 Queen Street, Auckland"
-          className="h-12"
-        />
+        <div className="flex gap-2">
+          <Input
+            value={address}
+            onChange={(e) => setAddress(e.target.value)}
+            placeholder="e.g. 42 Queen Street, Auckland"
+            className="h-12 flex-1 min-w-0"
+          />
+          <VoiceInputButton
+            className="h-12 w-12 shrink-0"
+            onTranscript={(t) =>
+              setAddress((prev) => {
+                const p = prev.trim();
+                return p ? `${p} ${t}` : t;
+              })
+            }
+          />
+        </div>
         {!isNewCustomer && customer && (
           <p className="text-xs text-muted-foreground">Auto-filled from customer. Change if different site.</p>
         )}
@@ -148,12 +175,23 @@ function CustomerPicker({
 
       <div className="space-y-2">
         <Label className="flex items-center gap-1.5"><FileText className="w-3.5 h-3.5" /> {requireDescription ? "Work done" : "Description (optional)"}</Label>
-        <Textarea
-          value={description}
-          onChange={e => setDescription(e.target.value)}
-          placeholder={requireDescription ? "What work was completed?" : "What's the job? e.g. Replace hot water cylinder"}
-          className="min-h-[80px]"
-        />
+        <div className="flex gap-2 items-start">
+          <Textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder={requireDescription ? "What work was completed?" : "What's the job? e.g. Replace hot water cylinder"}
+            className="min-h-[80px] flex-1 min-w-0"
+          />
+          <VoiceInputButton
+            className="h-12 w-12 shrink-0 mt-0.5"
+            onTranscript={(t) =>
+              setDescription((prev) => {
+                const p = prev.trim();
+                return p ? `${p} ${t}` : t;
+              })
+            }
+          />
+        </div>
       </div>
     </div>
   );
@@ -379,6 +417,7 @@ function ScheduleGrid({
 export default function WorkNewJob() {
   const navigate = useNavigate();
   const { isIntroMode } = useAppMode();
+  const { customers } = useDemoData();
   const [step, setStep] = useState(1);
 
   // Step 1
@@ -450,6 +489,7 @@ export default function WorkNewJob() {
         <div className="space-y-5">
           <h2 className="text-base font-semibold text-card-foreground">Work done</h2>
           <CustomerPicker
+            customers={customers}
             customer={customer} setCustomer={setCustomer}
             address={address} setAddress={setAddress}
             description={description} setDescription={setDescription}
@@ -467,6 +507,7 @@ export default function WorkNewJob() {
         <div className="space-y-5">
           <h2 className="text-base font-semibold text-card-foreground">Who's the job for?</h2>
           <CustomerPicker
+            customers={customers}
             customer={customer} setCustomer={setCustomer}
             address={address} setAddress={setAddress}
             description={description} setDescription={setDescription}
