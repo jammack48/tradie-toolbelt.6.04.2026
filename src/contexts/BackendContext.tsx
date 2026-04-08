@@ -12,9 +12,14 @@ export interface DebugInfo {
   key_set: boolean;
   key_type: string;
   key_preview: string;
+  ai_key_set?: boolean;
+  ai_error?: string | null;
   init_error: string | null;
   query_error: string | null;
 }
+
+const AI_ONLINE_STATUSES = new Set(["online", "connected", "ready", "ok"]);
+const DB_ONLINE_STATUSES = new Set(["connected", "online", "ready", "ok"]);
 
 interface BackendContextValue {
   connected: boolean | null;
@@ -53,19 +58,27 @@ export function BackendProvider({ children }: { children: React.ReactNode }) {
     try {
       const res = await fetch(`${BACKEND_URL}/health`, { signal: AbortSignal.timeout(8000) });
       if (res.ok) {
-        const data = await res.json();
+        const data = await res.json() as Record<string, unknown>;
         setConnected(true);
-        const db = typeof data.db === "string" ? data.db : "not_reported";
-        const ai = typeof data.ai === "string" ? data.ai : "unknown";
+        const debugObj = (data.debug && typeof data.debug === "object") ? (data.debug as DebugInfo) : null;
+        const db = typeof data.db === "string" && data.db.trim() ? data.db : "not_reported";
+        const ai =
+          typeof data.ai === "string" && data.ai.trim()
+            ? data.ai
+            : debugObj?.ai_key_set === false
+              ? "not_configured"
+              : "not_reported";
+        const dbIsOnline = DB_ONLINE_STATUSES.has(db.toLowerCase());
+        const aiIsOnline = AI_ONLINE_STATUSES.has(ai.toLowerCase());
         setDbStatus(db);
         setAiStatus(ai);
-        setDbConnected(db === "connected");
-        setAiConnected(ai === "online");
-        if (data.debug) setDebug(data.debug);
+        setDbConnected(dbIsOnline);
+        setAiConnected(aiIsOnline);
+        if (debugObj) setDebug(debugObj);
 
-        const debugMsg = data.debug?.init_error || data.debug?.query_error;
+        const debugMsg = debugObj?.init_error || debugObj?.query_error || debugObj?.ai_error;
         const suffix = debugMsg ? ` — ${debugMsg}` : "";
-        addLog(`Health OK • DB: ${db} • AI: ${ai}${suffix}`, db === "connected" && ai === "online");
+        addLog(`Health OK • DB: ${db} • AI: ${ai}${suffix}`, dbIsOnline && aiIsOnline);
       } else {
         setConnected(false);
         setDbConnected(null);

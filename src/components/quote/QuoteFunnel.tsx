@@ -13,6 +13,7 @@ import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { AiQuickQuoteDraft } from "@/types/aiQuickQuote";
 import { extractQuickQuoteWithAi, filesToDataUrls } from "@/services/aiQuoteService";
 import { toast } from "@/hooks/use-toast";
+import { sanitizeTranscript } from "@/lib/speechText";
 
 export interface FunnelResult {
   customer: DemoCustomer | null;
@@ -83,6 +84,7 @@ function QuickAiCapture({
   const fileRef = useRef<HTMLInputElement>(null);
   const transcriptRef = useRef("");
   const transcriptBaseRef = useRef("");
+  const sessionFinalRef = useRef("");
 
   useEffect(() => {
     transcriptRef.current = transcript;
@@ -106,26 +108,29 @@ function QuickAiCapture({
       return;
     }
     transcriptBaseRef.current = transcriptRef.current.trim();
+    sessionFinalRef.current = "";
     const rec = new SR();
     rec.lang = navigator.language?.startsWith("en") ? navigator.language : "en-NZ";
     rec.maxAlternatives = 1;
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (ev: SpeechRecognitionEvent) => {
-      const finalParts: string[] = [];
+      let sessionFinal = sessionFinalRef.current;
       const interimParts: string[] = [];
-      for (let i = 0; i < ev.results.length; i++) {
+      // Process only new result entries to avoid re-appending older finals.
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
         const chunk = ev.results[i]?.[0]?.transcript?.trim() ?? "";
         if (!chunk) continue;
         if (ev.results[i].isFinal) {
-          finalParts.push(chunk);
+          sessionFinal = [sessionFinal, chunk].filter(Boolean).join(" ").trim();
         } else {
           interimParts.push(chunk);
         }
       }
-      const recognized = [...finalParts, ...interimParts].join(" ").trim();
+      sessionFinalRef.current = sanitizeTranscript(sessionFinal);
+      const recognized = sanitizeTranscript([sessionFinalRef.current, ...interimParts].join(" ").trim());
       const base = transcriptBaseRef.current;
-      setTranscript([base, recognized].filter(Boolean).join(" ").trim());
+      setTranscript(sanitizeTranscript([base, recognized].filter(Boolean).join(" ").trim()));
     };
     rec.onerror = () => {
       toast({ title: "Mic error", description: "Check microphone permission.", variant: "destructive" });
