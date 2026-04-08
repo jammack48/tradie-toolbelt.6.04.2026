@@ -63,8 +63,7 @@ function AppLayout() {
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const location = useLocation();
-  const effectiveToolbarPosition =
-    isWorkMode && isMobile && (position === "left" || position === "right") ? "bottom" : position;
+  const effectiveToolbarPosition = position;
 
   type EntryStep = "entry" | "login" | "post_login_workspace" | "trade" | "mode" | "ready";
   const [entryStep, setEntryStep] = useState<EntryStep>(() => (mode && trade ? "ready" : "entry"));
@@ -156,8 +155,8 @@ function AppLayout() {
         className={cn(
           isWorkMode && effectiveToolbarPosition === "bottom" && "pb-16",
           isWorkMode && effectiveToolbarPosition === "top" && "pt-14",
-          isWorkMode && effectiveToolbarPosition === "left" && "pl-16",
-          isWorkMode && effectiveToolbarPosition === "right" && "pr-16"
+          isWorkMode && effectiveToolbarPosition === "left" && (isMobile ? "pl-20" : "pl-16"),
+          isWorkMode && effectiveToolbarPosition === "right" && (isMobile ? "pr-20" : "pr-16")
         )}
       >
         <Routes>

@@ -105,12 +105,16 @@ export function BackendLogPanel() {
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider mb-1">Connection Debug</p>
             <DebugRow label="SUPABASE_URL" value={debug.url_set ? "✓ set" : "✗ missing"} warn={!debug.url_set} />
             <DebugRow label="SUPABASE_SERVICE_KEY" value={debug.key_set ? "✓ set" : "✗ missing"} warn={!debug.key_set} />
+            <DebugRow label="OPENAI_API_KEY" value={debug.ai_key_set ? "✓ set" : "✗ missing"} warn={!debug.ai_key_set} />
             <DebugRow
               label="Key type"
               value={debug.key_type}
               warn={debug.key_type !== "legacy_jwt" && debug.key_set}
             />
             <DebugRow label="Key preview" value={debug.key_preview} />
+            {debug.ai_error && (
+              <DebugRow label="AI error" value={debug.ai_error} warn />
+            )}
             {debug.init_error && (
               <DebugRow label="Init error" value={debug.init_error} warn />
             )}

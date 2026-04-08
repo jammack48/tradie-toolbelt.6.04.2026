@@ -32,8 +32,7 @@ interface PageToolbarProps {
 export function PageToolbar({ tabs, activeTab, onTabChange, children, pageHeading, currentPage, highlightedTabs = [], tutorialKey }: PageToolbarProps) {
   const isMobile = useIsMobile();
   const { position: rawPosition } = useToolbarPosition();
-  // On mobile, always collapse side toolbars into a horizontal bar.
-  const position = isMobile && (rawPosition === "left" || rawPosition === "right") ? "bottom" : rawPosition;
+  const position = rawPosition;
   const { tutorialOn } = useTutorial();
 
   const tutorialBanner = tutorialOn ? <TutorialBanner overrideKey={tutorialKey} tabKey={activeTab} /> : null;
@@ -63,7 +62,7 @@ export function PageToolbar({ tabs, activeTab, onTabChange, children, pageHeadin
     return (
       <div className={cn("flex flex-row", position === "right" && "flex-row-reverse")}>
         <nav className={cn(
-          "w-[200px] shrink-0 flex flex-col gap-1 py-2 px-2 bg-card sticky top-[48px] h-[calc(100vh-48px)] overflow-y-auto",
+          "w-[240px] shrink-0 flex flex-col gap-1 py-2 px-2 bg-card sticky top-[48px] h-[calc(100vh-48px)] overflow-y-auto",
           position === "left" ? "rounded-r-xl border-r border-border" : "rounded-l-xl border-l border-border"
         )}>
           
@@ -174,7 +173,7 @@ export function PageToolbar({ tabs, activeTab, onTabChange, children, pageHeadin
       <div className="flex flex-row min-h-screen" style={position === "right" ? { flexDirection: "row-reverse" } : undefined}>
         <nav
           className={cn(
-            "w-16 shrink-0 flex flex-col items-center gap-1 py-2 bg-card overflow-y-auto fixed top-[48px] bottom-0 z-40",
+            "w-24 shrink-0 flex flex-col items-stretch gap-1 py-2 px-1 bg-card overflow-y-auto fixed top-[48px] bottom-0 z-40",
             position === "left" ? "left-0 rounded-r-xl border-r border-border" : "right-0 rounded-l-xl border-l border-border"
           )}
         >
@@ -184,7 +183,7 @@ export function PageToolbar({ tabs, activeTab, onTabChange, children, pageHeadin
               key={id}
               onClick={() => onTabChange(id)}
               className={cn(
-                "flex flex-col items-center justify-center w-14 min-h-[52px] rounded-lg transition-colors shrink-0 gap-0.5 px-0.5",
+                "flex items-center justify-start w-full min-h-[44px] rounded-lg transition-colors shrink-0 gap-2 px-2 py-1.5",
                 isManager(id)
                   ? (isActive(id) ? managerActive : managerInactive)
                   : isActive(id)
@@ -197,11 +196,11 @@ export function PageToolbar({ tabs, activeTab, onTabChange, children, pageHeadin
                 <Icon className="w-5 h-5" />
                 {BADGE_TABS.has(id) && <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-destructive" />}
               </span>
-              <span className="text-[9px] font-medium leading-none truncate w-full text-center">{label}</span>
+              <span className="text-[11px] font-medium leading-none truncate">{label}</span>
             </button>
           ))}
         </nav>
-        <main className={cn("flex-1 min-w-0", position === "left" ? "ml-16" : "mr-16")}>
+        <main className={cn("flex-1 min-w-0", position === "left" ? "ml-24" : "mr-24")}>
           {headingBar}
           {tutorialBanner}
           <div className="p-4 overflow-x-hidden">{children}</div>

@@ -3,6 +3,7 @@ import { Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "@/hooks/use-toast";
+import { sanitizeTranscript } from "@/lib/speechText";
 
 function getSpeechRecognitionCtor(): (new () => SpeechRecognition) | null {
   if (typeof window === "undefined") return null;
@@ -61,7 +62,7 @@ export function VoiceInputButton({
     recRef.current = rec;
 
     rec.onresult = (event: SpeechRecognitionEvent) => {
-      const text = event.results[event.resultIndex]?.[0]?.transcript?.trim();
+      const text = sanitizeTranscript(event.results[event.resultIndex]?.[0]?.transcript ?? "");
       if (text) onTranscript(text);
       stop();
     };

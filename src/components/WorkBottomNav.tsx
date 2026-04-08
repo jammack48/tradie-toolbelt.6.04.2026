@@ -38,7 +38,7 @@ export function WorkBottomNav() {
   const isMobile = useIsMobile();
   const urgentCount = getUrgentCount();
   const items = isTimesheetOnlyMode ? TIMESHEET_NAV_ITEMS : isIntroMode ? INTRO_NAV_ITEMS : NAV_ITEMS;
-  const effectivePosition = isMobile && (position === "left" || position === "right") ? "bottom" : position;
+  const effectivePosition = position;
   const isVertical = effectivePosition === "left" || effectivePosition === "right";
 
   return (
@@ -46,7 +46,7 @@ export function WorkBottomNav() {
       className={cn(
         "z-50 border-border bg-background/95 backdrop-blur-sm",
         isVertical
-          ? "fixed top-12 bottom-0 w-16 border-r"
+          ? (isMobile ? "fixed top-12 bottom-0 w-20 border-r" : "fixed top-12 bottom-0 w-16 border-r")
           : "fixed left-0 right-0 h-14 border-t safe-area-bottom",
         effectivePosition === "left" && "left-0",
         effectivePosition === "right" && "right-0 border-r-0 border-l",
@@ -73,7 +73,9 @@ export function WorkBottomNav() {
               className={cn(
                 "rounded-lg transition-colors",
                 isVertical
-                  ? "flex flex-col items-center justify-center w-14 min-h-[52px] gap-0.5 px-0.5"
+                  ? (isMobile
+                    ? "flex flex-col items-center justify-center w-[72px] min-h-[58px] gap-0.5 px-1"
+                    : "flex flex-col items-center justify-center w-14 min-h-[52px] gap-0.5 px-0.5")
                   : "flex flex-col items-center gap-0.5 px-3 py-1",
                 active ? "text-primary" : "text-muted-foreground"
               )}
