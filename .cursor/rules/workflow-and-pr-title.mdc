@@ -1,0 +1,23 @@
+---
+description: Workflow and PR title standards for this repo
+alwaysApply: true
+---
+
+# Workflow rules
+
+1. Before making changes, provide a short summary of what you are going to do.
+2. If requirements are ambiguous or missing, ask clarifying question(s) before implementing.
+3. After completing code changes, commit and push to the remote branch.
+
+# Pull request title rule
+
+Use a human-readable date/time plus summary. Do not use generic titles like "update #5".
+
+Preferred format:
+
+`8 Apr 22:46 – <clear summary of change>`
+
+Examples:
+- `8 Apr 22:46 – Improve Quote Funnel AI extraction fallback`
+- `9 Apr 08:15 – Fix customer search filtering in Customers page`
+- `9 Apr 10:30 – Add pipeline transition guard for quote status`
