@@ -14,7 +14,7 @@ import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { AiQuickQuoteDraft } from "@/types/aiQuickQuote";
 import { extractQuickQuoteWithAi, filesToDataUrls, resolveCustomerWithAi } from "@/services/aiQuoteService";
 import { toast } from "@/hooks/use-toast";
-import { sanitizeTranscript } from "@/lib/speechText";
+import { mergeOverlappingFinalSegments, sanitizeTranscript } from "@/lib/speechText";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -139,18 +139,18 @@ function QuickAiCapture({
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (ev: SpeechRecognitionEvent) => {
-      // Rebuild all finals from the full `results` list each time. On some phones the same
-      // result index is updated ("hi" → "hi there"); incremental append would keep both.
-      let composedFinal = "";
+      // Rebuild finals from the full `results` list (same index can grow), then merge
+      // overlapping finals common on Samsung Chrome (repeated growing "1 2 3 …" chains).
+      const finalChunks: string[] = [];
       for (let i = 0; i < ev.results.length; i++) {
         if (!ev.results[i].isFinal) continue;
         const chunk = ev.results[i]?.[0]?.transcript?.trim() ?? "";
-        if (chunk) composedFinal = [composedFinal, chunk].filter(Boolean).join(" ").trim();
+        if (chunk) finalChunks.push(chunk);
       }
-      sessionFinalRef.current = sanitizeTranscript(composedFinal);
+      sessionFinalRef.current = sanitizeTranscript(mergeOverlappingFinalSegments(finalChunks));
 
       const interimParts: string[] = [];
-      for (let i = 0; i < ev.results.length; i++) {
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
         if (ev.results[i].isFinal) continue;
         const chunk = ev.results[i]?.[0]?.transcript?.trim() ?? "";
         if (chunk) interimParts.push(chunk);

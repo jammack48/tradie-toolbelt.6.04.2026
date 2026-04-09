@@ -1,4 +1,44 @@
 /**
+ * Samsung/Android Chrome often marks several overlapping strings as "final": each new
+ * slice repeats the earlier phrase and extends it (e.g. "1 2 3 … 7" then "1 2 3 … 8").
+ * Naively joining all finals duplicates the run. This keeps ordered segments but drops
+ * a segment when it is a strict extension of the previous one (string or word-prefix).
+ */
+export function mergeOverlappingFinalSegments(parts: string[]): string {
+  const norm = parts.map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
+  if (norm.length === 0) return "";
+
+  const isTokenPrefix = (shorter: string, longer: string) => {
+    const a = shorter.split(/\s+/).filter(Boolean);
+    const b = longer.split(/\s+/).filter(Boolean);
+    if (a.length === 0 || b.length < a.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (a[i].toLowerCase() !== b[i].toLowerCase()) return false;
+    }
+    return true;
+  };
+
+  const out: string[] = [];
+  for (const p of norm) {
+    if (out.length === 0) {
+      out.push(p);
+      continue;
+    }
+    const last = out[out.length - 1];
+    if (p === last) continue;
+    if (p.startsWith(last) || isTokenPrefix(last, p)) {
+      out[out.length - 1] = p;
+      continue;
+    }
+    if (last.startsWith(p) || isTokenPrefix(p, last)) {
+      continue;
+    }
+    out.push(p);
+  }
+  return out.join(" ").trim();
+}
+
+/**
  * Normalizes speech-to-text output by trimming whitespace and reducing
  * obvious stutter/repetition artifacts produced by browser recognizers.
  */
