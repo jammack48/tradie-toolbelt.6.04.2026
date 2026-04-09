@@ -1,0 +1,34 @@
+---
+description: Phase 1 MVP — 30s on-site quote, mobile-first, scope challenge, future-ideas deferral
+alwaysApply: true
+---
+
+# Phase 1 MVP focus (mobile quote in ~30s)
+
+## North star
+
+Ship an MVP where someone on site can: **open the app → record what they want + photos → get a quote → follow the flows we define → send via email and SMS**, with the whole capture-to-quote path aimed at **~30 seconds** for the happy path.
+
+Optimize UI and flows for **mobile-first** (touch, narrow viewport, camera, quick actions). Desktop remains usable but is not the primary design target for Phase 1.
+
+## Scope challenge (before building “nice extras”)
+
+When the user asks for work that **does not clearly advance** the north star (examples: follow-up sequences, heavy CRM automation, marketing funnels, deep reporting, multi-tenant admin polish):
+
+1. **Pause and ask explicitly:** “Does this help the 30s on-site quote MVP right now, or should we defer it?”
+2. If they **confirm it should not be in MVP now** (or say no / defer / later): **do not implement it in the main path.** Instead capture it under **`docs/future-ideas/`** as a short dated note (see below).
+3. If they **insist** it is in scope, proceed—but briefly restate why it ties to capture → quote → send.
+
+## Future ideas inbox
+
+- **Folder:** `docs/future-ideas/`
+- **When deferring:** add or append a file such as `docs/future-ideas/YYYY-MM-DD-short-title.md` with: idea summary, why it was deferred, and optional “revisit when” (e.g. after MVP ships).
+- Do **not** expand MVP code paths for deferred items unless the user explicitly promotes them back into scope.
+
+## Learning from real quotes (product direction)
+
+It is expected to start with **little or no job history**. As quotes go out and line items are tied to **real materials and labour**, later suggestions and defaults can **gain weight** (frequency, recency, similarity). That mental model is sound; implement retrieval/ranking **after** the core capture → quote → send loop is reliable.
+
+## Dev ergonomics
+
+Prefer starting the dev server in a way that **opens the browser** (see Vite `server.open` and optional `.vscode` tasks). For mobile layout checks, use the browser’s **device/responsive mode** or a narrow window; do not assume desktop width for Phase 1 UX decisions.
