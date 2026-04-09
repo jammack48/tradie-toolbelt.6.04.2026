@@ -10,7 +10,7 @@ import { generateWeekJobs } from "@/components/schedule/scheduleData";
 import { useDemoData } from "@/contexts/DemoDataContext";
 import { useUserSettings } from "@/contexts/UserSettingsContext";
 import { parseBusinessProfile, toolsGreetingLabel } from "@/lib/businessProfile";
-import { Package, ChevronUp, ChevronDown, Plus, Zap, FileText } from "lucide-react";
+import { Package, ChevronUp, ChevronDown, Plus, Zap, FileText, Mic } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Card, CardContent } from "@/components/ui/card";
@@ -34,19 +34,29 @@ function FABMenu() {
         <div className="space-y-3">
           <Button
             variant="outline"
+            className="h-auto min-h-[4.5rem] w-full justify-start gap-4 px-5 py-6 text-lg font-semibold rounded-xl border-2 border-primary/40 bg-primary/5"
+            onClick={() => { setOpen(false); navigate("/quote/new"); }}
+          >
+            <Mic className="h-7 w-7 text-primary shrink-0" />
+            Quick Quote
+          </Button>
+          <p className="text-[11px] text-muted-foreground -mt-1 px-0.5">Mic-first capture, photos, then AI interpretation.</p>
+          <Button
+            variant="outline"
+            className="h-auto min-h-[4.5rem] w-full justify-start gap-4 px-5 py-6 text-lg font-semibold rounded-xl border-2"
+            onClick={() => { setOpen(false); navigate("/quote/new?mode=guided"); }}
+          >
+            <FileText className="h-7 w-7 text-primary shrink-0" />
+            Quote
+          </Button>
+          <p className="text-[11px] text-muted-foreground -mt-1 px-0.5">Step-by-step: customer, site, scope (no quick AI card).</p>
+          <Button
+            variant="outline"
             className="h-auto min-h-[4.5rem] w-full justify-start gap-4 px-5 py-6 text-lg font-semibold rounded-xl border-2"
             onClick={() => { setOpen(false); navigate("/new-job"); }}
           >
             <Zap className="h-7 w-7 text-primary shrink-0" />
-            New Job
-          </Button>
-          <Button
-            variant="outline"
-            className="h-auto min-h-[4.5rem] w-full justify-start gap-4 px-5 py-6 text-lg font-semibold rounded-xl border-2"
-            onClick={() => { setOpen(false); navigate("/quote/new"); }}
-          >
-            <FileText className="h-7 w-7 text-primary shrink-0" />
-            New Quote
+            Job
           </Button>
         </div>
       </PopoverContent>

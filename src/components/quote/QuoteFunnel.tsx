@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Search, ArrowLeft, ArrowRight, Wrench, Zap, Settings, Hammer, Bath, Pencil, ChevronsUpDown, Package, X, Mic, Square, Loader2, Camera } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,6 +17,8 @@ import { toast } from "@/hooks/use-toast";
 import { sanitizeTranscript } from "@/lib/speechText";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { cn } from "@/lib/utils";
 
 export interface FunnelResult {
   customer: DemoCustomer | null;
@@ -102,6 +105,7 @@ function QuickAiCapture({
   const transcriptRef = useRef("");
   const transcriptBaseRef = useRef("");
   const sessionFinalRef = useRef("");
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     transcriptRef.current = transcript;
@@ -118,6 +122,9 @@ function QuickAiCapture({
   };
 
   const start = () => {
+    if (recRef.current) {
+      return;
+    }
     const w = window as Window & { SpeechRecognition?: new () => SpeechRecognition; webkitSpeechRecognition?: new () => SpeechRecognition };
     const SR = w.SpeechRecognition ?? w.webkitSpeechRecognition;
     if (!SR) {
@@ -132,22 +139,27 @@ function QuickAiCapture({
     rec.interimResults = true;
     rec.continuous = true;
     rec.onresult = (ev: SpeechRecognitionEvent) => {
-      let sessionFinal = sessionFinalRef.current;
-      const interimParts: string[] = [];
-      // Process only new result entries to avoid re-appending older finals.
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+      // Rebuild all finals from the full `results` list each time. On some phones the same
+      // result index is updated ("hi" → "hi there"); incremental append would keep both.
+      let composedFinal = "";
+      for (let i = 0; i < ev.results.length; i++) {
+        if (!ev.results[i].isFinal) continue;
         const chunk = ev.results[i]?.[0]?.transcript?.trim() ?? "";
-        if (!chunk) continue;
-        if (ev.results[i].isFinal) {
-          sessionFinal = [sessionFinal, chunk].filter(Boolean).join(" ").trim();
-        } else {
-          interimParts.push(chunk);
-        }
+        if (chunk) composedFinal = [composedFinal, chunk].filter(Boolean).join(" ").trim();
       }
-      sessionFinalRef.current = sanitizeTranscript(sessionFinal);
-      const recognized = sanitizeTranscript([sessionFinalRef.current, ...interimParts].join(" ").trim());
+      sessionFinalRef.current = sanitizeTranscript(composedFinal);
+
+      const interimParts: string[] = [];
+      for (let i = 0; i < ev.results.length; i++) {
+        if (ev.results[i].isFinal) continue;
+        const chunk = ev.results[i]?.[0]?.transcript?.trim() ?? "";
+        if (chunk) interimParts.push(chunk);
+      }
+      const interimJoined = sanitizeTranscript(interimParts.join(" ").trim());
       const base = transcriptBaseRef.current;
-      setTranscript(sanitizeTranscript([base, recognized].filter(Boolean).join(" ").trim()));
+      setTranscript(
+        sanitizeTranscript([base, sessionFinalRef.current, interimJoined].filter(Boolean).join(" ").trim())
+      );
     };
     rec.onerror = () => {
       toast({ title: "Mic error", description: "Check microphone permission.", variant: "destructive" });
@@ -288,26 +300,62 @@ function QuickAiCapture({
   };
 
   return (
-    <div className="rounded-xl border border-primary/30 bg-card p-4 mb-4 space-y-3">
-      <div className="flex items-center justify-between gap-2">
-        <div>
+    <div
+      className={cn(
+        "rounded-xl border border-primary/30 bg-card mb-4 space-y-4 p-4",
+        isMobile && "shadow-sm"
+      )}
+    >
+      <div className={cn("text-center", !isMobile && "text-left sm:flex sm:items-start sm:justify-between sm:gap-3")}>
+        <div className="min-w-0">
           <p className="text-sm font-semibold text-card-foreground">Quick AI Quote</p>
-          <p className="text-xs text-muted-foreground">Tap mic, narrate the job, optionally add photos, then auto-fill.</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Tap the mic, say the job, add site photos if you like, then run AI interpretation.
+          </p>
         </div>
-        <Button type="button" size="sm" variant={recording ? "destructive" : "default"} className="gap-1" onClick={() => (recording ? stop() : start())}>
-          {recording ? <Square className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-          {recording ? "Stop" : "Record"}
-        </Button>
+        {!isMobile && (
+          <Button
+            type="button"
+            size="sm"
+            variant={recording ? "destructive" : "default"}
+            className="gap-1 shrink-0"
+            onClick={() => (recording ? stop() : start())}
+          >
+            {recording ? <Square className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+            {recording ? "Stop" : "Record"}
+          </Button>
+        )}
       </div>
+
+      {isMobile && (
+        <div className="flex flex-col items-center gap-2 py-1">
+          <button
+            type="button"
+            aria-label={recording ? "Stop recording" : "Start recording"}
+            aria-pressed={recording}
+            onClick={() => (recording ? stop() : start())}
+            className={cn(
+              "rounded-full flex items-center justify-center shadow-lg transition-all active:scale-[0.97]",
+              "min-h-[5.5rem] min-w-[5.5rem] h-[5.5rem] w-[5.5rem]",
+              recording ? "bg-destructive text-destructive-foreground ring-4 ring-destructive/25" : "bg-primary text-primary-foreground ring-4 ring-primary/20"
+            )}
+          >
+            {recording ? <Square className="w-9 h-9" /> : <Mic className="w-10 h-10" />}
+          </button>
+          <p className="text-xs font-medium text-muted-foreground">{recording ? "Listening… tap to stop" : "Tap to dictate"}</p>
+        </div>
+      )}
+
       <Textarea
         value={transcript}
         onChange={(e) => setTranscript(e.target.value)}
         placeholder="Example: New hot water cylinder at 12 Wai Shing Place for Jamie Mackie, standard kit, about 2 hours..."
-        className="min-h-[90px]"
+        className={cn("min-h-[100px] text-base sm:text-sm", isMobile && "min-h-[120px]")}
       />
-      <div className="flex items-center justify-between gap-2">
+
+      <div className={cn("flex flex-col gap-3", !isMobile && "sm:flex-row sm:items-center sm:justify-between")}>
         <div className="text-xs text-muted-foreground">{photos.length} photo(s) attached</div>
-        <div className="flex items-center gap-2">
+        <div className={cn("flex flex-col gap-2", !isMobile && "sm:flex-row sm:items-center sm:gap-2")}>
           <input
             ref={fileRef}
             type="file"
@@ -317,13 +365,26 @@ function QuickAiCapture({
             className="hidden"
             onChange={(e) => setPhotos(Array.from(e.target.files ?? []))}
           />
-          <Button type="button" variant="outline" size="sm" className="gap-1" onClick={() => fileRef.current?.click()}>
-            <Camera className="w-3.5 h-3.5" />
+          <Button
+            type="button"
+            variant="outline"
+            size={isMobile ? "default" : "sm"}
+            className={cn("gap-2 w-full", !isMobile && "sm:w-auto")}
+            onClick={() => fileRef.current?.click()}
+          >
+            <Camera className="w-4 h-4 shrink-0" />
             Photos
           </Button>
-          <Button type="button" size="sm" className="gap-1" disabled={!transcript.trim() || extracting} onClick={apply}>
-            {extracting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Zap className="w-3.5 h-3.5" />}
-            Extract
+          <Button
+            type="button"
+            size={isMobile ? "default" : "sm"}
+            className={cn("gap-2 w-full font-semibold", !isMobile && "sm:w-auto")}
+            disabled={!transcript.trim() || extracting}
+            title="Send transcript and photos to AI for interpretation and line-item suggestions"
+            onClick={apply}
+          >
+            {extracting ? <Loader2 className="w-4 h-4 animate-spin shrink-0" /> : <Zap className="w-4 h-4 shrink-0" />}
+            {extracting ? "Analysing…" : "Interpret with AI"}
           </Button>
         </div>
       </div>
@@ -804,6 +865,8 @@ function StepBundle({
 
 /* ── Main Funnel (pure content, no page shell) ─────────── */
 export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initialCustomer }: QuoteFunnelProps) {
+  const [searchParams] = useSearchParams();
+  const hideQuickAi = searchParams.get("mode") === "guided";
   const { customers, materials, usingProdData, addCustomer } = useDemoData();
   const demoBundles = usingProdData ? [] : bundleTemplates;
   const startStep = initialCustomer ? 2 : 1;
@@ -852,8 +915,10 @@ export function QuoteFunnel({ onComplete, onStepChange, label = "quote", initial
   };
 
   return (
-    <div className="max-w-lg mx-auto">
-      <QuickAiCapture customers={customers} materials={materials} onApply={handleApplyAiDraft} onCreateCustomer={addCustomer} />
+    <div className="w-full max-w-lg mx-auto">
+      {!hideQuickAi && (
+        <QuickAiCapture customers={customers} materials={materials} onApply={handleApplyAiDraft} onCreateCustomer={addCustomer} />
+      )}
       {step === 1 && (
         <StepCustomer onSelect={handleSelectCustomer} onSkip={handleSkipCustomer} label={label} customers={customers} />
       )}

@@ -222,42 +222,49 @@ export default function QuotePage() {
   }
 
   if (isNew && !funnelComplete) {
+    const backState =
+      managerState?.fromManager ? managerState : managerState?.fromStage ? { fromStage: managerState.fromStage } : undefined;
     return (
       <>
-        <PageToolbar
-          tabs={QUOTE_EXTRAS}
-          activeTab="overview"
-          onTabChange={handleTabChange}
-          pageHeading={
-            <div className="flex items-center gap-3 flex-wrap">
-              <h2 className="text-base font-bold text-card-foreground">New Quote</h2>
-              <StepIndicator current={funnelStep} />
+        <div className="flex flex-col min-h-[calc(100dvh-48px)] bg-background">
+          <header className="sticky top-[48px] z-30 border-b border-border bg-background px-3 py-2.5 sm:px-5 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+            <div className="flex items-center gap-2 min-w-0">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="shrink-0 -ml-1 h-9"
+                onClick={() => navigate("/", { state: backState })}
+              >
+                Back
+              </Button>
+              <h2 className="text-base font-bold text-card-foreground truncate">New Quote</h2>
             </div>
-          }
-        >
-          {funnelError ? (
-            <div className="rounded-lg border bg-card p-4">
-              <h3 className="text-sm font-semibold text-card-foreground">Quote setup is unavailable</h3>
-              <p className="text-sm text-muted-foreground mt-1">{funnelError}</p>
-            </div>
-          ) : (
-            <FunnelErrorBoundary
-              onError={() => {
-                setFunnelError("Something went wrong while rendering the quote setup. Please try again.");
-              }}
-            >
-              <QuoteFunnel
-                onComplete={(data) => {
-                  setFunnelData(data);
-                  // Only pre-fill scope for custom descriptions, not bundle defaults
-                  setFunnelComplete(true);
+            <StepIndicator current={funnelStep} />
+          </header>
+          <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 sm:px-5 pb-[max(1.25rem,env(safe-area-inset-bottom))]">
+            {funnelError ? (
+              <div className="rounded-lg border bg-card p-4 max-w-lg mx-auto">
+                <h3 className="text-sm font-semibold text-card-foreground">Quote setup is unavailable</h3>
+                <p className="text-sm text-muted-foreground mt-1">{funnelError}</p>
+              </div>
+            ) : (
+              <FunnelErrorBoundary
+                onError={() => {
+                  setFunnelError("Something went wrong while rendering the quote setup. Please try again.");
                 }}
-                onStepChange={setFunnelStep}
-                initialCustomer={initialCustomer}
-              />
-            </FunnelErrorBoundary>
-          )}
-
+              >
+                <QuoteFunnel
+                  onComplete={(data) => {
+                    setFunnelData(data);
+                    setFunnelComplete(true);
+                  }}
+                  onStepChange={setFunnelStep}
+                  initialCustomer={initialCustomer}
+                />
+              </FunnelErrorBoundary>
+            )}
+          </div>
           <AlertDialog open={showLeaveDialog} onOpenChange={setShowLeaveDialog}>
             <AlertDialogContent>
               <AlertDialogHeader>
@@ -273,7 +280,7 @@ export default function QuotePage() {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
-        </PageToolbar>
+        </div>
       </>
     );
   }
