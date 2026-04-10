@@ -157,8 +157,11 @@ function QuickAiCapture({
       }
       const interimJoined = sanitizeTranscript(interimParts.join(" ").trim());
       const base = transcriptBaseRef.current;
+      const liveSession = interimJoined
+        ? mergeOverlappingFinalSegments([sessionFinalRef.current, interimJoined])
+        : sessionFinalRef.current;
       setTranscript(
-        sanitizeTranscript([base, sessionFinalRef.current, interimJoined].filter(Boolean).join(" ").trim())
+        sanitizeTranscript([base, liveSession].filter(Boolean).join(" ").trim())
       );
     };
     rec.onerror = () => {
