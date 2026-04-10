@@ -12,7 +12,12 @@ import type { DemoCustomer } from "@/types/demoData";
 import { formatCustomerAddressSubtitle } from "@/lib/customerAddress";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { AiQuickQuoteDraft } from "@/types/aiQuickQuote";
-import { extractQuickQuoteWithAi, filesToDataUrls, resolveCustomerWithAi } from "@/services/aiQuoteService";
+import {
+  enrichQuickQuoteWithAi,
+  extractQuickQuoteIdentityWithAi,
+  filesToDataUrls,
+  resolveCustomerWithAi,
+} from "@/services/aiQuoteService";
 import { toast } from "@/hooks/use-toast";
 import { mergeOverlappingFinalSegments, sanitizeTranscript } from "@/lib/speechText";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
@@ -86,6 +91,7 @@ function QuickAiCapture({
   const [transcript, setTranscript] = useState("");
   const [recording, setRecording] = useState(false);
   const [extracting, setExtracting] = useState(false);
+  const [extractStage, setExtractStage] = useState<string>("");
   const [applying, setApplying] = useState(false);
   const [photos, setPhotos] = useState<File[]>([]);
   const [draft, setDraft] = useState<AiQuickQuoteDraft | null>(null);
@@ -185,23 +191,43 @@ function QuickAiCapture({
   const apply = async () => {
     if (!transcript.trim()) return;
     setExtracting(true);
+    setExtractStage("Extracting customer name and site address…");
     try {
-      const photoDataUrls = await filesToDataUrls(photos);
-      const draft = await extractQuickQuoteWithAi({
-        transcript: transcript.trim(),
-        photoDataUrls,
-        customers,
-        materials,
+      const trimmedTranscript = transcript.trim();
+      const identity = await extractQuickQuoteIdentityWithAi({
+        transcript: trimmedTranscript,
       });
 
+      const baseDraft: AiQuickQuoteDraft = {
+        customerName: identity.customerName || undefined,
+        customerPhone: identity.customerPhone || undefined,
+        customerEmail: identity.customerEmail || undefined,
+        customerConfidence: 0,
+        isNewCustomer: true,
+        siteAddress: identity.siteAddress || "",
+        siteAddressConfidence: identity.siteAddressConfidence || 0,
+        scopeSummary: (identity.scopeSummary || trimmedTranscript).trim(),
+        materialsSuggested: [],
+        labourSuggested: [],
+        assumptions: [],
+        missingFields: identity.missingFields ?? [],
+        reviewFlags: identity.reviewFlags ?? [],
+      };
+
+      setDraft(baseDraft);
+      setReviewAddress(baseDraft.siteAddress || "");
+      setReviewScope(baseDraft.scopeSummary || "");
+      setExtraDetails("");
+
+      setExtractStage("Matching customer records…");
       let defaultChoice = "none";
       let rankedMatches: Array<{ id: number; name: string; address: string; phone?: string; email?: string; score: number; reasons: string[] }> = [];
       try {
         const resolution = await resolveCustomerWithAi({
-          customerName: draft.customerName || "",
-          customerPhone: draft.customerPhone || "",
-          customerEmail: draft.customerEmail || "",
-          siteAddress: draft.siteAddress || "",
+          customerName: baseDraft.customerName || "",
+          customerPhone: baseDraft.customerPhone || "",
+          customerEmail: baseDraft.customerEmail || "",
+          siteAddress: baseDraft.siteAddress || "",
           customers,
         });
         rankedMatches = resolution.topMatches ?? [];
@@ -212,33 +238,45 @@ function QuickAiCapture({
         } else if (typeof resolution.bestMatchId === "number" && resolution.bestMatchScore >= 0.62) {
           defaultChoice = `match:${resolution.bestMatchId}`;
         }
-        setNewCustomerName(resolution.extractedCustomer?.name || draft.customerName || "");
-        setNewCustomerPhone(resolution.extractedCustomer?.phone || draft.customerPhone || "");
-        setNewCustomerEmail(resolution.extractedCustomer?.email || draft.customerEmail || "");
-        setNewCustomerAddress(resolution.extractedCustomer?.address || draft.siteAddress || "");
+        setNewCustomerName(resolution.extractedCustomer?.name || baseDraft.customerName || "");
+        setNewCustomerPhone(resolution.extractedCustomer?.phone || baseDraft.customerPhone || "");
+        setNewCustomerEmail(resolution.extractedCustomer?.email || baseDraft.customerEmail || "");
+        setNewCustomerAddress(resolution.extractedCustomer?.address || baseDraft.siteAddress || "");
       } catch {
-        // Fallback to existing extraction result if resolver endpoint fails.
-        const matched = typeof draft.customerId === "number"
-          ? customers.find((c) => c.id === draft.customerId) ?? null
-          : null;
-        if (matched) defaultChoice = `match:${matched.id}`;
-        setNewCustomerName(draft.customerName || "");
-        setNewCustomerPhone(draft.customerPhone || "");
-        setNewCustomerEmail(draft.customerEmail || "");
-        setNewCustomerAddress(draft.siteAddress || "");
+        setNewCustomerName(baseDraft.customerName || "");
+        setNewCustomerPhone(baseDraft.customerPhone || "");
+        setNewCustomerEmail(baseDraft.customerEmail || "");
+        setNewCustomerAddress(baseDraft.siteAddress || "");
       }
 
       setMatchScores(rankedMatches);
-      setDraft(draft);
       setCustomerChoice(defaultChoice);
-      setReviewAddress(draft.siteAddress || "");
-      setReviewScope((draft.scopeSummary || transcript.trim()).trim());
-      setExtraDetails("");
+
+      setExtractStage("Extracting materials and labour suggestions…");
+      const photoDataUrls = await filesToDataUrls(photos);
+      const enrichment = await enrichQuickQuoteWithAi({
+        transcript: trimmedTranscript,
+        scopeSummary: baseDraft.scopeSummary,
+        photoDataUrls,
+        materials,
+      });
+
+      const finalDraft: AiQuickQuoteDraft = {
+        ...baseDraft,
+        materialsSuggested: enrichment.materialsSuggested ?? [],
+        labourSuggested: enrichment.labourSuggested ?? [],
+        assumptions: enrichment.assumptions ?? [],
+        missingFields: Array.from(new Set([...(baseDraft.missingFields ?? []), ...(enrichment.missingFields ?? [])])),
+        reviewFlags: Array.from(new Set([...(baseDraft.reviewFlags ?? []), ...(enrichment.reviewFlags ?? [])])),
+      };
+
+      setDraft(finalDraft);
       toast({ title: "AI draft ready", description: "Confirm customer, address and scope." });
     } catch (e) {
       toast({ title: "AI extraction failed", description: e instanceof Error ? e.message : "Try again.", variant: "destructive" });
     } finally {
       setExtracting(false);
+      setExtractStage("");
     }
   };
 
@@ -391,6 +429,12 @@ function QuickAiCapture({
           </Button>
         </div>
       </div>
+      {extracting && (
+        <div className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground flex items-center gap-2">
+          <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" />
+          <span>{extractStage || "Processing…"}</span>
+        </div>
+      )}
       {draft && (
         <div className="rounded-lg border border-border bg-background/60 p-3 space-y-4">
           <div>
