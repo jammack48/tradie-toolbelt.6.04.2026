@@ -8,12 +8,31 @@ export function mergeOverlappingFinalSegments(parts: string[]): string {
   const norm = parts.map((p) => p.replace(/\s+/g, " ").trim()).filter(Boolean);
   if (norm.length === 0) return "";
 
+  const toComparableTokens = (value: string) => {
+    const raw = value.toLowerCase().replace(/\s+/g, " ").trim();
+    if (!raw) return [] as string[];
+    const tokens: string[] = [];
+    for (const token of raw.split(" ")) {
+      const cleaned = token.replace(/^[^a-z0-9]+|[^a-z0-9]+$/gi, "");
+      if (!cleaned) continue;
+      // Samsung often alternates "1234" and "1 2 3 4"; split pure digits for compare only.
+      if (/^\d+$/.test(cleaned) && cleaned.length > 1) {
+        tokens.push(...cleaned.split(""));
+      } else {
+        tokens.push(cleaned);
+      }
+    }
+    return tokens;
+  };
+
+  const normalizeForCompare = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim();
+
   const isTokenPrefix = (shorter: string, longer: string) => {
-    const a = shorter.split(/\s+/).filter(Boolean);
-    const b = longer.split(/\s+/).filter(Boolean);
+    const a = toComparableTokens(shorter);
+    const b = toComparableTokens(longer);
     if (a.length === 0 || b.length < a.length) return false;
     for (let i = 0; i < a.length; i++) {
-      if (a[i].toLowerCase() !== b[i].toLowerCase()) return false;
+      if (a[i] !== b[i]) return false;
     }
     return true;
   };
@@ -25,12 +44,14 @@ export function mergeOverlappingFinalSegments(parts: string[]): string {
       continue;
     }
     const last = out[out.length - 1];
-    if (p === last) continue;
-    if (p.startsWith(last) || isTokenPrefix(last, p)) {
+    const pCmp = normalizeForCompare(p);
+    const lastCmp = normalizeForCompare(last);
+    if (pCmp === lastCmp) continue;
+    if (pCmp.startsWith(lastCmp) || isTokenPrefix(last, p)) {
       out[out.length - 1] = p;
       continue;
     }
-    if (last.startsWith(p) || isTokenPrefix(p, last)) {
+    if (lastCmp.startsWith(pCmp) || isTokenPrefix(p, last)) {
       continue;
     }
     out.push(p);
@@ -58,12 +79,12 @@ export function sanitizeTranscript(raw: string): string {
     cappedWordRepeats.push(word);
   }
 
-  // Collapse immediately repeated short phrases: "how old is how old is".
+  // Collapse immediately repeated phrases: "how old is how old is".
   const out: string[] = [];
   let i = 0;
   while (i < cappedWordRepeats.length) {
     let consumed = false;
-    const maxPhraseSize = Math.min(6, Math.floor((cappedWordRepeats.length - i) / 2));
+    const maxPhraseSize = Math.min(12, Math.floor((cappedWordRepeats.length - i) / 2));
     for (let phraseSize = maxPhraseSize; phraseSize >= 2; phraseSize--) {
       const phrase = cappedWordRepeats
         .slice(i, i + phraseSize)
