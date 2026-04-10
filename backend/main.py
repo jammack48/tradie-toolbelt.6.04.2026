@@ -44,6 +44,17 @@ class QuickQuoteExtractRequest(BaseModel):
     candidate_materials: list[CandidateMaterial] = Field(default_factory=list)
 
 
+class QuickQuoteIdentityRequest(BaseModel):
+    transcript: str = Field(min_length=1)
+
+
+class QuickQuoteEnrichRequest(BaseModel):
+    transcript: str = Field(min_length=1)
+    scope_summary: str = ""
+    photo_data_urls: list[str] = Field(default_factory=list)
+    candidate_materials: list[CandidateMaterial] = Field(default_factory=list)
+
+
 class ResolveCustomerRequest(BaseModel):
     customer_name: str = ""
     customer_phone: str = ""
@@ -415,6 +426,167 @@ async def quick_quote_extract(payload: QuickQuoteExtractRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"AI extraction error: {type(e).__name__}: {str(e)[:180]}")
+
+
+@app.post("/ai/quick-quote-identity")
+async def quick_quote_identity(payload: QuickQuoteIdentityRequest):
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured on backend.")
+
+    try:
+        from openai import OpenAI
+
+        model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        client = OpenAI(api_key=api_key)
+
+        system = (
+            "You extract only customer identity + job site details from a tradie transcript. "
+            "Do not infer details that are not present. "
+            "Return ONLY strict JSON."
+        )
+
+        user_text = {
+            "transcript": payload.transcript,
+            "output_schema": {
+                "customer_name": "string",
+                "customer_phone": "string",
+                "customer_email": "string",
+                "site_address": "string",
+                "scope_summary": "string",
+                "missing_fields": ["string"],
+                "review_flags": ["string"],
+            },
+        }
+
+        resp = client.chat.completions.create(
+            model=model,
+            temperature=0.1,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": json.dumps(user_text)},
+            ],
+        )
+        raw = resp.choices[0].message.content or "{}"
+        parsed = _load_json(raw)
+
+        return {
+            "customerName": str(parsed.get("customer_name") or "").strip() or None,
+            "customerPhone": str(parsed.get("customer_phone") or "").strip() or None,
+            "customerEmail": str(parsed.get("customer_email") or "").strip() or None,
+            "siteAddress": str(parsed.get("site_address") or "").strip(),
+            "siteAddressConfidence": 0.75 if parsed.get("site_address") else 0.0,
+            "scopeSummary": str(parsed.get("scope_summary") or "").strip() or payload.transcript[:500],
+            "missingFields": [str(x) for x in (parsed.get("missing_fields") or []) if str(x).strip()],
+            "reviewFlags": [str(x) for x in (parsed.get("review_flags") or []) if str(x).strip()],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI identity extraction error: {type(e).__name__}: {str(e)[:180]}")
+
+
+@app.post("/ai/quick-quote-enrich")
+async def quick_quote_enrich(payload: QuickQuoteEnrichRequest):
+    api_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    if not api_key:
+        raise HTTPException(status_code=503, detail="OPENAI_API_KEY is not configured on backend.")
+
+    try:
+        from openai import OpenAI
+
+        model = os.environ.get("OPENAI_MODEL", "gpt-4o-mini")
+        client = OpenAI(api_key=api_key)
+
+        system = (
+            "You enrich a tradie quote draft with labour and materials. "
+            "Focus on practical, conservative defaults. "
+            "Return ONLY strict JSON."
+        )
+
+        user_text = {
+            "transcript": payload.transcript,
+            "scope_summary": payload.scope_summary or "",
+            "material_candidates": [m.model_dump() for m in payload.candidate_materials][:500],
+            "output_schema": {
+                "materials_suggested": [
+                    {"name": "string", "qty": "number", "unit": "string", "unit_price": "number|null", "confidence": "0..1"}
+                ],
+                "labour_suggested": [
+                    {"role": "string", "hours": "number", "rate": "number|null", "confidence": "0..1"}
+                ],
+                "assumptions": ["string"],
+                "missing_fields": ["string"],
+                "review_flags": ["string"],
+            },
+        }
+
+        content: list[dict[str, Any]] = [{"type": "text", "text": json.dumps(user_text)}]
+        for data_url in payload.photo_data_urls[:4]:
+            if data_url.startswith("data:image/"):
+                content.append({"type": "image_url", "image_url": {"url": data_url}})
+
+        resp = client.chat.completions.create(
+            model=model,
+            temperature=0.15,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system},
+                {"role": "user", "content": content},
+            ],
+        )
+        raw = resp.choices[0].message.content or "{}"
+        parsed = _load_json(raw)
+
+        materials_out: list[dict[str, Any]] = []
+        for m in parsed.get("materials_suggested") or []:
+            name = str((m or {}).get("name") or "").strip()
+            qty = float((m or {}).get("qty") or 0) if str((m or {}).get("qty") or "").strip() else 0.0
+            unit = str((m or {}).get("unit") or "ea").strip() or "ea"
+            conf = float((m or {}).get("confidence") or 0.6)
+            matched, _ms = _best_material(name, payload.candidate_materials)
+            unit_price = (m or {}).get("unit_price")
+            if matched and (unit_price is None or unit_price == ""):
+                unit_price = matched.unit_price
+            materials_out.append(
+                {
+                    "itemId": matched.id if matched else None,
+                    "name": matched.name if matched else name,
+                    "qty": max(1.0, qty if qty > 0 else 1.0),
+                    "unit": matched.unit if matched else unit,
+                    "unitPrice": float(unit_price) if unit_price is not None else None,
+                    "confidence": min(max(conf, 0.0), 1.0),
+                    "source": "ai+catalog" if matched else "ai",
+                }
+            )
+
+        labour_out: list[dict[str, Any]] = []
+        for l in parsed.get("labour_suggested") or []:
+            role = str((l or {}).get("role") or "Labour").strip() or "Labour"
+            hours = float((l or {}).get("hours") or 0.0)
+            rate = (l or {}).get("rate")
+            conf = float((l or {}).get("confidence") or 0.6)
+            labour_out.append(
+                {
+                    "role": role,
+                    "hours": max(0.5, hours if hours > 0 else 0.5),
+                    "rate": float(rate) if rate is not None else None,
+                    "confidence": min(max(conf, 0.0), 1.0),
+                }
+            )
+
+        return {
+            "materialsSuggested": materials_out,
+            "labourSuggested": labour_out,
+            "assumptions": [str(x) for x in (parsed.get("assumptions") or []) if str(x).strip()],
+            "missingFields": [str(x) for x in (parsed.get("missing_fields") or []) if str(x).strip()],
+            "reviewFlags": [str(x) for x in (parsed.get("review_flags") or []) if str(x).strip()],
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"AI enrichment error: {type(e).__name__}: {str(e)[:180]}")
 
 
 @app.post("/ai/resolve-customer")
