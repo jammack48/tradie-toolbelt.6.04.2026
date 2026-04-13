@@ -13,7 +13,39 @@ export type BusinessProfile = {
   email?: string;
   address?: string;
   website?: string;
+  /** Quote delivery: email subject (placeholders {{customer_name}}, {{business_name}}, {{quote_total}}, {{job_address}}) */
+  quoteEmailSubject?: string;
+  quoteEmailBody?: string;
+  quoteSmsBody?: string;
 };
+
+/** Defaults aligned with dummyTemplates e-q-1 / s-q-1 */
+export const DEFAULT_QUOTE_EMAIL_SUBJECT = "Your quote from {{business_name}} is ready";
+
+export const DEFAULT_QUOTE_EMAIL_BODY =
+  "Hi {{customer_name}},\n\nThanks for getting in touch. Please find your quote for ${{quote_total}} below.\n\nLet us know if you have any questions.\n\nCheers,\n{{business_name}}";
+
+export const DEFAULT_QUOTE_SMS_BODY =
+  "Hi {{customer_name}}, your quote for ${{quote_total}} from {{business_name}} is ready. Check your email for details!";
+
+export const QUOTE_TEMPLATE_VARIABLE_HINTS = [
+  "{{customer_name}}",
+  "{{business_name}}",
+  "{{quote_total}}",
+  "{{job_address}}",
+] as const;
+
+export function quoteMessagingFromProfile(profile: BusinessProfile): {
+  quoteEmailSubject: string;
+  quoteEmailBody: string;
+  quoteSmsBody: string;
+} {
+  return {
+    quoteEmailSubject: (profile.quoteEmailSubject ?? "").trim() || DEFAULT_QUOTE_EMAIL_SUBJECT,
+    quoteEmailBody: (profile.quoteEmailBody ?? "").trim() || DEFAULT_QUOTE_EMAIL_BODY,
+    quoteSmsBody: (profile.quoteSmsBody ?? "").trim() || DEFAULT_QUOTE_SMS_BODY,
+  };
+}
 
 function pickStr(o: Record<string, unknown>, key: string): string | undefined {
   const v = o[key];
@@ -57,6 +89,9 @@ export function parseBusinessProfile(raw: unknown): BusinessProfile {
   out.email = s("email");
   out.address = s("address");
   out.website = s("website");
+  out.quoteEmailSubject = s("quoteEmailSubject");
+  out.quoteEmailBody = s("quoteEmailBody");
+  out.quoteSmsBody = s("quoteSmsBody");
   return out;
 }
 

@@ -1,5 +1,5 @@
-import { useState, useCallback, useRef, useMemo } from "react";
-import { DollarSign, Plus, Send, Save, X, ChevronDown, ChevronUp, Package, Search, Percent, RotateCcw, Trash2, GripVertical, Star } from "lucide-react";
+import { useState, useCallback, useRef, useMemo, useEffect } from "react";
+import { DollarSign, Plus, Send, Save, X, ChevronDown, ChevronUp, Package, Search, Percent, RotateCcw, Trash2, GripVertical, Star, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -11,7 +11,7 @@ import { Collapsible, CollapsibleTrigger, CollapsibleContent } from "@/component
 import {
   Command, CommandInput, CommandList, CommandEmpty, CommandGroup, CommandItem,
 } from "@/components/ui/command";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { toast } from "@/hooks/use-toast";
 import type { JobDetail } from "@/data/dummyJobDetails";
 import { catalogueItems as staticCatalogueItems, bundleTemplates, type CatalogueItem } from "@/data/dummyJobDetails";
@@ -19,6 +19,9 @@ import { coverLetterTemplates } from "@/data/coverLetterTemplates";
 import { QuotePreview } from "@/components/quote/QuotePreview";
 import { useDemoData } from "@/contexts/DemoDataContext";
 import { useUserSettings } from "@/contexts/UserSettingsContext";
+import { parseBusinessProfile, quoteMessagingFromProfile } from "@/lib/businessProfile";
+import { mergeQuoteTemplatePlaceholders } from "@/lib/quoteTemplateMerge";
+import { sendQuoteMessage } from "@/services/messagingService";
 import { loadQuoteFavorites, saveQuoteFavorite } from "@/lib/quoteFavorites";
 import { VoiceInputButton } from "@/components/VoiceInputButton";
 import type { AiQuickQuoteDraft } from "@/types/aiQuickQuote";
@@ -160,7 +163,7 @@ function BlockSection({ label, items, section, isOpen, onToggle, onUpdate, onDel
 /* ── Main QuoteTab ──────────────────────────────────────── */
 export function QuoteTab({ job, initialBundle, initialDescription, initialAiDraft, beforeActions, onSendQuote }: QuoteTabProps) {
   const { materials, usingProdData } = useDemoData();
-  const { companyId } = useUserSettings();
+  const { companyId, userId, settings } = useUserSettings();
   const bundleOptions = usingProdData ? [] : bundleTemplates;
 
   const mkItem = (name: string, qty: number, unitPrice: number): LineItem => ({
@@ -294,6 +297,13 @@ export function QuoteTab({ job, initialBundle, initialDescription, initialAiDraf
   const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null);
   const [bundleQty, setBundleQty] = useState(1);
 
+  const [sendDialogOpen, setSendDialogOpen] = useState(false);
+  const [sendEmailEnabled, setSendEmailEnabled] = useState(true);
+  const [sendSmsEnabled, setSendSmsEnabled] = useState(true);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [recipientPhone, setRecipientPhone] = useState("");
+  const [sendSubmitting, setSendSubmitting] = useState(false);
+
   const lastInputRef = useRef<HTMLInputElement>(null);
 
   const paletteFavorites = useMemo(() => loadQuoteFavorites(companyId), [companyId, paletteOpen]);
@@ -424,6 +434,108 @@ export function QuoteTab({ job, initialBundle, initialDescription, initialAiDraf
   const markupAmount = sellSubtotal - costTotal;
   const gst = sellSubtotal * 0.15;
   const grandTotal = sellSubtotal + gst;
+
+  const businessProfile = useMemo(() => parseBusinessProfile(settings?.business_profile), [settings?.business_profile]);
+  const quoteTemplates = useMemo(() => quoteMessagingFromProfile(businessProfile), [businessProfile]);
+
+  const quotePlaceholders = useMemo(
+    () => ({
+      customer_name: job.client || "",
+      business_name: businessProfile.businessName || businessProfile.displayName || "Our business",
+      quote_total: grandTotal.toFixed(2),
+      job_address: job.address || "",
+    }),
+    [job.client, job.address, grandTotal, businessProfile.businessName, businessProfile.displayName],
+  );
+
+  const previewSubject = useMemo(
+    () => mergeQuoteTemplatePlaceholders(quoteTemplates.quoteEmailSubject, quotePlaceholders),
+    [quoteTemplates.quoteEmailSubject, quotePlaceholders],
+  );
+  const previewEmailBody = useMemo(
+    () => mergeQuoteTemplatePlaceholders(quoteTemplates.quoteEmailBody, quotePlaceholders),
+    [quoteTemplates.quoteEmailBody, quotePlaceholders],
+  );
+  const previewSmsBody = useMemo(
+    () => mergeQuoteTemplatePlaceholders(quoteTemplates.quoteSmsBody, quotePlaceholders),
+    [quoteTemplates.quoteSmsBody, quotePlaceholders],
+  );
+
+  useEffect(() => {
+    if (!sendDialogOpen) return;
+    const em = (job.clientEmail || "").trim();
+    const ph = (job.clientPhone || "").trim();
+    setRecipientEmail(em);
+    setRecipientPhone(ph);
+    if (em && ph) {
+      setSendEmailEnabled(true);
+      setSendSmsEnabled(true);
+    } else if (em) {
+      setSendEmailEnabled(true);
+      setSendSmsEnabled(false);
+    } else if (ph) {
+      setSendEmailEnabled(false);
+      setSendSmsEnabled(true);
+    } else {
+      setSendEmailEnabled(true);
+      setSendSmsEnabled(false);
+    }
+  }, [sendDialogOpen, job.clientEmail, job.clientPhone]);
+
+  const openSendQuoteDialog = () => {
+    if (!userId) {
+      toast({
+        title: "Sign in required",
+        description: "Log in to send quotes by email or SMS.",
+        variant: "destructive",
+      });
+      return;
+    }
+    setSendDialogOpen(true);
+  };
+
+  const confirmSendQuote = async () => {
+    if (!sendEmailEnabled && !sendSmsEnabled) {
+      toast({ title: "Choose a channel", description: "Turn on email and/or SMS.", variant: "destructive" });
+      return;
+    }
+    if (sendEmailEnabled && (!recipientEmail.trim() || !recipientEmail.includes("@"))) {
+      toast({ title: "Email needed", description: "Enter a valid recipient email.", variant: "destructive" });
+      return;
+    }
+    if (sendSmsEnabled && !recipientPhone.trim()) {
+      toast({ title: "Mobile needed", description: "Enter the customer mobile for SMS.", variant: "destructive" });
+      return;
+    }
+    setSendSubmitting(true);
+    try {
+      await sendQuoteMessage({
+        send_email: sendEmailEnabled,
+        send_sms: sendSmsEnabled,
+        to_email: sendEmailEnabled ? recipientEmail.trim() : null,
+        to_phone: sendSmsEnabled ? recipientPhone.trim() : null,
+        email_subject: previewSubject,
+        email_text: previewEmailBody,
+        sms_text: previewSmsBody,
+        quote_reference: String(job.id),
+      });
+      const channels = [sendEmailEnabled && "email", sendSmsEnabled && "SMS"].filter(Boolean).join(" & ");
+      toast({
+        title: "Quote sent",
+        description: `$${grandTotal.toFixed(2)} to ${job.client || "customer"} via ${channels || "your channels"}.`,
+      });
+      onSendQuote?.(grandTotal);
+      setSendDialogOpen(false);
+    } catch (e) {
+      toast({
+        title: "Could not send",
+        description: e instanceof Error ? e.message : "Try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setSendSubmitting(false);
+    }
+  };
 
   const labourCatalogue = catalogueItems.filter((i) => i.section === "labour");
   const materialsCatalogue = catalogueItems.filter((i) => i.section === "materials");
@@ -628,17 +740,98 @@ export function QuoteTab({ job, initialBundle, initialDescription, initialAiDraf
 
       {/* ── Action buttons ───────────────────────────────── */}
       <div className="flex gap-2">
-        <Button
-          size="lg"
-          className="flex-1 h-12 gap-2"
-          onClick={() => {
-            toast({ title: "Quote sent!", description: `$${grandTotal.toFixed(2)} quote sent to ${job.client}` });
-            onSendQuote?.(grandTotal);
-          }}
-        ><Send className="w-5 h-5" /> Send Quote</Button>
+        <Button size="lg" className="flex-1 h-12 gap-2" onClick={openSendQuoteDialog}>
+          <Send className="w-5 h-5" /> Send Quote
+        </Button>
         <QuotePreview blocks={blocks} coverLetter={coverLetter} customerName={job.client} jobAddress={job.address || ""} />
         <Button size="lg" variant="outline" className="h-12 gap-2" onClick={() => toast({ title: "Draft saved" })}><Save className="w-4 h-4" /> Save</Button>
       </div>
+
+      <Dialog open={sendDialogOpen} onOpenChange={setSendDialogOpen}>
+        <DialogContent className="max-w-[min(100vw-2rem,28rem)] max-h-[min(90dvh,40rem)] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Send quote</DialogTitle>
+          </DialogHeader>
+          {!userId ? (
+            <p className="text-sm text-muted-foreground">Sign in to send this quote by email or SMS.</p>
+          ) : (
+            <div className="space-y-4">
+              <div className="flex flex-col gap-3">
+                <div className="flex items-center justify-between gap-3">
+                  <Label htmlFor="send-email-toggle" className="text-sm font-medium">
+                    Email
+                  </Label>
+                  <Switch id="send-email-toggle" checked={sendEmailEnabled} onCheckedChange={setSendEmailEnabled} />
+                </div>
+                {sendEmailEnabled && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Recipient email</Label>
+                    <Input
+                      type="email"
+                      value={recipientEmail}
+                      onChange={(e) => setRecipientEmail(e.target.value)}
+                      className="text-sm"
+                      autoComplete="email"
+                    />
+                  </div>
+                )}
+                <div className="flex items-center justify-between gap-3 pt-1">
+                  <Label htmlFor="send-sms-toggle" className="text-sm font-medium">
+                    SMS
+                  </Label>
+                  <Switch id="send-sms-toggle" checked={sendSmsEnabled} onCheckedChange={setSendSmsEnabled} />
+                </div>
+                {sendSmsEnabled && (
+                  <div className="space-y-1.5">
+                    <Label className="text-xs text-muted-foreground">Recipient mobile</Label>
+                    <Input
+                      value={recipientPhone}
+                      onChange={(e) => setRecipientPhone(e.target.value)}
+                      placeholder="e.g. 021 123 4567"
+                      className="text-sm"
+                      autoComplete="tel"
+                    />
+                  </div>
+                )}
+              </div>
+              <div className="rounded-md border border-border bg-muted/40 p-3 space-y-2 text-xs">
+                <p className="font-semibold text-card-foreground">Preview</p>
+                {sendEmailEnabled && (
+                  <div className="space-y-1">
+                    <p className="text-muted-foreground">Subject</p>
+                    <p className="text-card-foreground break-words">{previewSubject}</p>
+                    <p className="text-muted-foreground pt-1">Body</p>
+                    <pre className="whitespace-pre-wrap font-sans text-card-foreground break-words">{previewEmailBody}</pre>
+                  </div>
+                )}
+                {sendSmsEnabled && (
+                  <div className="space-y-1 pt-1">
+                    <p className="text-muted-foreground">SMS</p>
+                    <p className="text-card-foreground break-words">{previewSmsBody}</p>
+                  </div>
+                )}
+                <p className="text-[10px] text-muted-foreground pt-1">
+                  Edit wording in Settings → Integrations → Quote delivery templates.
+                </p>
+              </div>
+            </div>
+          )}
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button type="button" variant="outline" onClick={() => setSendDialogOpen(false)} disabled={sendSubmitting}>
+              Cancel
+            </Button>
+            <Button type="button" onClick={() => void confirmSendQuote()} disabled={sendSubmitting || !userId}>
+              {sendSubmitting ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin mr-2" /> Sending…
+                </>
+              ) : (
+                "Send"
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* ── Section-filtered command palette dialog ──────── */}
       <Dialog open={paletteOpen} onOpenChange={(open) => { setPaletteOpen(open); if (!open) { setPaletteSection(null); setPaletteBlockId(null); } }}>

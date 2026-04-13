@@ -1,10 +1,17 @@
+import asyncio
+import html
 import json
 import os
 from difflib import SequenceMatcher
 import re
-from typing import Any
-from fastapi import FastAPI, HTTPException
+from typing import Annotated, Any
+
+import httpx
+import jwt
+import resend
+from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 app = FastAPI(title="Tradie Toolbelt API")
@@ -63,6 +70,17 @@ class ResolveCustomerRequest(BaseModel):
     candidate_customers: list[CandidateCustomer] = Field(default_factory=list)
 
 
+class SendQuoteRequest(BaseModel):
+    send_email: bool = False
+    send_sms: bool = False
+    to_email: str | None = None
+    to_phone: str | None = None
+    email_subject: str = ""
+    email_text: str = ""
+    sms_text: str = ""
+    quote_reference: str | None = None
+
+
 def _best_customer(name: str, candidates: list[CandidateCustomer]) -> tuple[int | None, float]:
     q = (name or "").strip().lower()
     if not q:
@@ -99,6 +117,78 @@ def _best_material(name: str, candidates: list[CandidateMaterial]) -> tuple[Cand
 
 def _normalize_phone(value: str) -> str:
     return re.sub(r"\D+", "", value or "")
+
+
+def _international_sms_dest(raw: str) -> str | None:
+    """MSISDN without + (e.g. 64211234567) for SMS Everyone Destinations."""
+    d = _normalize_phone(raw)
+    if len(d) < 8:
+        return None
+    if d.startswith("64"):
+        return d
+    if d.startswith("0"):
+        return "64" + d[1:]
+    if len(d) == 9 and d[0] == "2":
+        return "64" + d
+    if len(d) == 8 and d[0] == "2":
+        return "64" + d
+    return d
+
+
+def _messaging_env_flags() -> dict[str, bool]:
+    return {
+        "jwt_secret_configured": bool(os.environ.get("SUPABASE_JWT_SECRET", "").strip()),
+        "resend_configured": bool(
+            os.environ.get("RESEND_API_KEY", "").strip() and os.environ.get("RESEND_FROM", "").strip()
+        ),
+        "sms_everyone_configured": bool(
+            os.environ.get("SMS_EVERYONE_USERNAME", "").strip()
+            and os.environ.get("SMS_EVERYONE_PASSWORD", "").strip()
+            and os.environ.get("SMS_EVERYONE_ORIGINATOR", "").strip()
+        ),
+    }
+
+
+def _decode_supabase_user_id(authorization: str | None) -> str:
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing or invalid Authorization header")
+    token = authorization.split(" ", 1)[1].strip()
+    secret = os.environ.get("SUPABASE_JWT_SECRET", "").strip()
+    if not secret:
+        raise HTTPException(status_code=503, detail="SUPABASE_JWT_SECRET is not configured on the server.")
+    try:
+        payload = jwt.decode(
+            token,
+            secret,
+            algorithms=["HS256"],
+            audience="authenticated",
+            leeway=60,
+        )
+    except jwt.InvalidAudienceError:
+        try:
+            payload = jwt.decode(
+                token,
+                secret,
+                algorithms=["HS256"],
+                leeway=60,
+                options={"verify_aud": False},
+            )
+        except jwt.InvalidTokenError:
+            raise HTTPException(status_code=401, detail="Invalid token") from None
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Token expired") from None
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Invalid token") from None
+    sub = payload.get("sub")
+    if not sub or not isinstance(sub, str):
+        raise HTTPException(status_code=401, detail="Invalid token subject")
+    return sub
+
+
+def require_supabase_user(
+    authorization: Annotated[str | None, Header(alias="Authorization")] = None,
+) -> str:
+    return _decode_supabase_user_id(authorization)
 
 
 def _normalize_text(value: str) -> str:
@@ -284,6 +374,7 @@ async def health_check():
         "init_error": None,
         "query_error": None,
     }
+    debug.update(_messaging_env_flags())
 
     if not url or not key:
         debug["init_error"] = "Missing env var(s)"
@@ -624,3 +715,103 @@ async def resolve_customer(payload: ResolveCustomerRequest):
         "canAutoSelect": bool(best and best_score >= 0.86),
         "shouldCreateNew": should_create_new,
     }
+
+
+def _run_resend_send(to: str, subject: str, text: str) -> None:
+    key = os.environ.get("RESEND_API_KEY", "").strip()
+    from_f = os.environ.get("RESEND_FROM", "").strip()
+    resend.api_key = key
+    esc = html.escape(text)
+    html_body = f'<pre style="font-family:system-ui,sans-serif;white-space:pre-wrap">{esc}</pre>'
+    out = resend.Emails.send(
+        {
+            "from": from_f,
+            "to": to,
+            "subject": (subject or "Quote").strip() or "Quote",
+            "text": text,
+            "html": html_body,
+        }
+    )
+    if isinstance(out, dict):
+        err = out.get("error") or out.get("message")
+        if err:
+            raise RuntimeError(str(err))
+        sc = out.get("statusCode")
+        if isinstance(sc, int) and sc >= 400:
+            raise RuntimeError(str(out))
+
+
+async def _post_sms_everyone(dest: str, message: str, reference: str | None) -> None:
+    user = os.environ.get("SMS_EVERYONE_USERNAME", "").strip()
+    pwd = os.environ.get("SMS_EVERYONE_PASSWORD", "").strip()
+    originator = os.environ.get("SMS_EVERYONE_ORIGINATOR", "").strip()
+    url = os.environ.get("SMS_EVERYONE_SEND_URL", "https://smseveryone.com/api/campaign").strip()
+    body: dict[str, Any] = {
+        "Message": message,
+        "Originator": originator,
+        "Destinations": [dest],
+        "Action": "create",
+    }
+    ref = (reference or "").strip()
+    if ref:
+        body["Reference"] = ref[:120]
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        r = await client.post(url, json=body, auth=(user, pwd))
+        if r.status_code >= 400:
+            raise RuntimeError(r.text[:400] or r.reason_phrase)
+
+
+@app.post("/messaging/send-quote")
+async def messaging_send_quote(
+    payload: SendQuoteRequest,
+    _user_id: Annotated[str, Depends(require_supabase_user)],
+):
+    _ = _user_id
+    if not payload.send_email and not payload.send_sms:
+        raise HTTPException(status_code=400, detail="Select at least one of email or SMS.")
+
+    flags = _messaging_env_flags()
+    result: dict[str, Any] = {
+        "email_ok": None,
+        "sms_ok": None,
+        "email_error": None,
+        "sms_error": None,
+    }
+    failed = False
+
+    if payload.send_email:
+        if not flags["resend_configured"]:
+            raise HTTPException(status_code=503, detail="Email delivery is not configured on the server (Resend).")
+        em = (payload.to_email or "").strip()
+        if not em or "@" not in em:
+            raise HTTPException(status_code=400, detail="A valid recipient email is required to send email.")
+        if not (payload.email_text or "").strip():
+            raise HTTPException(status_code=400, detail="Email body is empty.")
+        try:
+            await asyncio.to_thread(_run_resend_send, em, payload.email_subject, payload.email_text)
+            result["email_ok"] = True
+        except Exception as e:
+            result["email_ok"] = False
+            result["email_error"] = f"{type(e).__name__}: {str(e)[:180]}"
+            failed = True
+
+    if payload.send_sms:
+        if not flags["sms_everyone_configured"]:
+            raise HTTPException(status_code=503, detail="SMS delivery is not configured on the server (SMS Everyone).")
+        dest = _international_sms_dest(payload.to_phone or "")
+        if not dest:
+            raise HTTPException(status_code=400, detail="A valid recipient mobile number is required to send SMS.")
+        msg = (payload.sms_text or "").strip()
+        if not msg:
+            raise HTTPException(status_code=400, detail="SMS message text is empty.")
+        try:
+            await _post_sms_everyone(dest, msg, payload.quote_reference)
+            result["sms_ok"] = True
+        except Exception as e:
+            result["sms_ok"] = False
+            result["sms_error"] = f"{type(e).__name__}: {str(e)[:180]}"
+            failed = True
+
+    if failed:
+        return JSONResponse(status_code=502, content=result)
+    return result

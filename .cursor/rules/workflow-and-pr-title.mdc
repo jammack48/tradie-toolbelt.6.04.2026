@@ -9,6 +9,16 @@ alwaysApply: true
 2. If requirements are ambiguous or missing, ask clarifying question(s) before implementing.
 3. After completing code changes, commit and push to the remote branch.
 
+# Plans and todo completion
+
+When using a structured plan with todos:
+
+1. **Finish implementation todos** in the task tracker as work completes. Mark items done when they are actually done; do not leave them stuck in `in_progress`.
+2. **Before closing out the plan**, give the user a **numbered “Your next steps”** checklist: concrete actions tied to what changed (e.g. copy `.env` from `.env.example`, set Render/backend env vars, run frontend and API locally, sign in and smoke-test a flow, verify DNS or sender domain for email). Tailor the list to the task; avoid generic filler.
+3. Where helpful, add **how to verify** each outcome (e.g. receive a test message, check logs, confirm UI behaviour).
+
+Keep this section in rules short; expand with specifics in the chat for each plan.
+
 # Pull request title rule
 
 Use a human-readable date/time plus summary. Do not use generic titles like "update #5".

@@ -13,6 +13,7 @@ import { useJobPrefix } from "@/contexts/JobPrefixContext";
 import { useDemoData } from "@/contexts/DemoDataContext";
 import { toast } from "@/hooks/use-toast";
 import { BusinessProfileForm } from "@/components/settings/BusinessProfileForm";
+import { QuoteDeliveryTemplatesForm } from "@/components/settings/QuoteDeliveryTemplatesForm";
 
 type SettingsTab = "business" | "notifications" | "appearance" | "billing" | "team" | "integrations" | "documents";
 
@@ -178,12 +179,38 @@ function SettingsContent({ tab }: { tab: SettingsTab }) {
     integrations: (
       <div className="space-y-4">
         <h2 className="text-lg font-semibold text-card-foreground">Integrations</h2>
-        {["Xero Accounting", "Stripe Payments", "Google Calendar", "SMS Gateway"].map((i) => (
+        <p className="text-sm text-muted-foreground">
+          Quote email uses{" "}
+          <a href="https://resend.com" className="text-primary underline underline-offset-2" target="_blank" rel="noreferrer">
+            Resend
+          </a>
+          ; SMS uses{" "}
+          <a
+            href="https://www.smseveryone.co.nz/api"
+            className="text-primary underline underline-offset-2"
+            target="_blank"
+            rel="noreferrer"
+          >
+            SMS Everyone
+          </a>
+          . API keys and sender details are configured as environment variables on the API server (e.g. Render), not here.
+        </p>
+        {["Xero Accounting", "Stripe Payments", "Google Calendar"].map((i) => (
           <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-card border border-border">
             <span className="text-sm text-card-foreground">{i}</span>
-            <Button size="sm" variant="outline">Connect</Button>
+            <Button size="sm" variant="outline">
+              Connect
+            </Button>
           </div>
         ))}
+        <div className="p-3 rounded-lg bg-card border border-border space-y-1">
+          <span className="text-sm font-medium text-card-foreground">Quote email and SMS</span>
+          <p className="text-xs text-muted-foreground">
+            When you send a quote from the app, the backend delivers via Resend and/or SMS Everyone if those env vars are
+            set. Use the templates below to change wording.
+          </p>
+        </div>
+        <QuoteDeliveryTemplatesForm />
       </div>
     ),
     documents: (
