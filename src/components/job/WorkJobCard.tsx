@@ -4,6 +4,7 @@ import { getJobDetail } from "@/data/dummyJobDetails";
 import { PageToolbar } from "@/components/PageToolbar";
 import { WorkOverviewTab } from "@/components/job/WorkOverviewTab";
 import { ScopeTab } from "@/components/job/ScopeTab";
+import { ElectricalDrawingTab } from "@/components/job/ElectricalDrawingTab";
 import { TimeTab } from "@/components/job/TimeTab";
 import { NotesTab } from "@/components/job/NotesTab";
 import { PhotosTab } from "@/components/job/PhotosTab";
@@ -27,7 +28,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import type { MaterialItem } from "@/data/dummyJobDetails";
 import type { CompletedChecklist } from "@/data/dummyChecklists";
 
-type WorkJobTab = "overview" | "scope" | "time" | "materials" | "notes" | "photos" | "forms" | "variations";
+type WorkJobTab = "overview" | "scope" | "drawing" | "time" | "materials" | "notes" | "photos" | "forms" | "variations";
 
 function WorkMaterialsTab({ materials, showPricing }: { materials: MaterialItem[]; showPricing?: boolean }) {
   return (
@@ -115,6 +116,7 @@ export default function WorkJobCard() {
   const tabContent: Record<WorkJobTab, React.ReactNode> = {
     overview: <WorkOverviewTab job={job} />,
     scope: <ScopeTab job={job} />,
+    drawing: <ElectricalDrawingTab jobId={job.id} />,
     time: <TimeTab timeEntries={job.timeEntries} />,
     materials: <WorkMaterialsTab materials={job.materials} showPricing={isSoleTrader} />,
     notes: <NotesTab notes={job.notes} />,
