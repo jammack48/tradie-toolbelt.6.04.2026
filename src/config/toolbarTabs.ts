@@ -3,7 +3,7 @@ import {
   ClipboardList, List, StickyNote, History, DollarSign, Clock, Camera,
   ClipboardCheck, Star, Archive, Building2, Bell, Palette, CreditCard,
   Shield, Wrench, Briefcase, UserPlus, BarChart3, Plus, Mail, MessageSquare,
-  ArrowLeft, Receipt, FileCheck, GitBranch,
+  ArrowLeft, Receipt, FileCheck, GitBranch, Map,
 } from "lucide-react";
 
 export interface ToolbarTab {
@@ -146,6 +146,7 @@ export const WORK_JOB_EXTRAS: ToolbarTab[] = [
   BACK_TAB,
   { id: "overview", label: "Overview", icon: ClipboardList },
   { id: "scope", label: "Scope", icon: FileCheck },
+  { id: "drawing", label: "Drawing", icon: Map },
   { id: "time", label: "Time", icon: Clock },
   { id: "materials", label: "Materials", icon: Package },
   { id: "notes", label: "Notes", icon: StickyNote },
